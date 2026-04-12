@@ -1,5 +1,5 @@
-import { format, getMonth, getYear, addMonths, subMonths, addDays, subDays, parseISO } from 'date-fns';
-import { Plus, Trash2, Minus } from 'lucide-react';
+import { format, getMonth, getYear, addMonths, subMonths, addDays, subDays, parseISO, differenceInDays } from 'date-fns';
+import { Plus, Trash2, Info } from 'lucide-react';
 import { useState } from 'react';
 import { SyncIndicator } from '../components/ui/SyncIndicator';
 import { SummaryCards } from '../components/dashboard/SummaryCards';
@@ -20,11 +20,88 @@ import {
   filterByDay, filterByMonth, filterByYear
 } from '../lib/finance';
 
-// Always compute today fresh
 function getNow()      { return new Date(); }
 function getTodayStr() { return format(getNow(), 'yyyy-MM-dd'); }
 function getMonthStr() { return format(getNow(), 'yyyy-MM'); }
 function getYearStr()  { return String(getYear(getNow())); }
+
+// ── Goal pace estimator ───────────────────────────────────────────────────
+function estimatePace(goal, allTransactions) {
+  const current   = Number(goal.current_amount || 0);
+  const target    = Number(goal.target_amount  || 0);
+  const remaining = target - current;
+  if (remaining <= 0) return null;
+
+  // Find all transactions tagged to this goal — fallback: use creation date vs now
+  const created   = goal.created_at ? new Date(goal.created_at) : subDays(new Date(), 30);
+  const daysSince = Math.max(differenceInDays(new Date(), created), 1);
+  const avgPerDay = current / daysSince;
+
+  if (avgPerDay <= 0) return { hasData: false };
+
+  const daysLeft = Math.ceil(remaining / avgPerDay);
+  return { hasData: true, daysLeft, avgPerDay };
+}
+
+// ── Score explanation modal ───────────────────────────────────────────────
+function ScoreExplainer({ onClose }) {
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 500,
+      display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
+    }} onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        background: '#1e293b', borderRadius: '20px 20px 0 0', border: '1px solid #334155',
+        width: '100%', maxWidth: 600, padding: '1.5rem 1.25rem 2rem',
+        maxHeight: '80dvh', overflowY: 'auto'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <h2 style={{ color: '#f1f5f9' }}>How is your score calculated?</h2>
+          <button onClick={onClose} style={{ background: '#334155', border: 'none', borderRadius: 8, color: '#94a3b8', width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>✕</button>
+        </div>
+
+        <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.25rem', lineHeight: 1.6 }}>
+          Your financial score (0–100) is calculated each time you view the dashboard based on 3 factors:
+        </p>
+
+        {[
+          {
+            icon: '💰', title: 'Savings Rate (up to +25 pts)',
+            desc: 'How much of your income you keep. Saving 30%+ earns the full 25 points. Negative balance subtracts 15 points.',
+            detail: '≥30% saved → +25 | 20–30% → +20 | 10–20% → +12 | 0–10% → +5 | negative → –15'
+          },
+          {
+            icon: '🎯', title: 'Budget Discipline (up to +15 pts)',
+            desc: 'How well you stay within your monthly budgets. Going over any category reduces your score.',
+            detail: '0 budgets exceeded → +15 | ≤25% exceeded → +5 | >25% exceeded → –10'
+          },
+          {
+            icon: '📅', title: 'Consistency streak (up to +10 pts)',
+            desc: 'Tracking your finances regularly. More than 6 months of data earns the full bonus.',
+            detail: '>6 months data → +10 | >2 months → +5'
+          },
+        ].map((item) => (
+          <div key={item.title} style={{ background: '#0f172a', borderRadius: 12, padding: '1rem', marginBottom: '0.75rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+              <span style={{ fontSize: '1.5rem' }}>{item.icon}</span>
+              <div>
+                <p style={{ fontWeight: 700, color: '#f1f5f9', marginBottom: '0.375rem' }}>{item.title}</p>
+                <p style={{ fontSize: '0.825rem', color: '#64748b', lineHeight: 1.5, marginBottom: '0.5rem' }}>{item.desc}</p>
+                <p style={{ fontSize: '0.75rem', color: '#475569', fontFamily: 'monospace', background: '#1e293b', padding: '0.375rem 0.625rem', borderRadius: 6 }}>{item.detail}</p>
+              </div>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ background: 'rgba(129,140,248,.08)', border: '1px solid rgba(129,140,248,.2)', borderRadius: 12, padding: '0.875rem', marginTop: '0.5rem' }}>
+          <p style={{ fontSize: '0.825rem', color: '#818cf8', lineHeight: 1.6 }}>
+            <strong>Base score starts at 50.</strong> Points are added or subtracted based on your current month's data. The score updates every time you open the dashboard.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { transactions, syncState, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
@@ -39,6 +116,7 @@ export default function Dashboard() {
   const [showForm, setShowForm]   = useState(false);
   const [editing, setEditing]     = useState(null);
   const [activeTab, setActiveTab] = useState('expense');
+  const [showScore, setShowScore] = useState(false);
 
   const [showGoalForm, setShowGoalForm]         = useState(false);
   const [goalName, setGoalName]                 = useState('');
@@ -46,24 +124,9 @@ export default function Dashboard() {
   const [goalCurrent, setGoalCurrent]           = useState('');
   const [goalDate, setGoalDate]                 = useState('');
   const [activeGoalId, setActiveGoalId]         = useState(null);
-  const [goalAction, setGoalAction]             = useState('add'); // 'add' | 'subtract'
+  const [goalAction, setGoalAction]             = useState('add');
   const [goalContribution, setGoalContribution] = useState('');
   const [savingGoalId, setSavingGoalId]         = useState(null);
-
-  // ── Period navigation ────────────────────────────────────────────────────
-  function handlePeriodChange(direction) {
-    if (view === 'daily') {
-      const d = parseISO(dayVal);
-      setDayVal(format(direction === 'next' ? addDays(d, 1) : subDays(d, 1), 'yyyy-MM-dd'));
-    }
-    if (view === 'monthly') {
-      const d = new Date(monthVal + '-15'); // use 15th to avoid month boundary issues
-      setMonthVal(format(direction === 'next' ? addMonths(d, 1) : subMonths(d, 1), 'yyyy-MM'));
-    }
-    if (view === 'yearly') {
-      setYearVal((prev) => String(Number(prev) + (direction === 'next' ? 1 : -1)));
-    }
-  }
 
   // ── Filter transactions ──────────────────────────────────────────────────
   const filtered = (() => {
@@ -82,11 +145,8 @@ export default function Dashboard() {
     budgets
   );
 
-  function periodLabel() {
-    if (view === 'daily')   return format(parseISO(dayVal), 'EEE, MMM d, yyyy');
-    if (view === 'monthly') return format(new Date(monthVal + '-15'), 'MMMM yyyy');
-    return yearVal;
-  }
+  const periodValue  = view === 'daily' ? dayVal : view === 'monthly' ? monthVal : yearVal;
+  const periodChange = view === 'daily' ? setDayVal : view === 'monthly' ? setMonthVal : setYearVal;
 
   // ── Transaction handlers ─────────────────────────────────────────────────
   async function handleDelete(id) {
@@ -106,9 +166,7 @@ export default function Dashboard() {
   // ── Goal handlers ────────────────────────────────────────────────────────
   async function handleAddGoal(e) {
     e.preventDefault();
-    if (!goalName.trim() || !goalTarget) {
-      push('Please enter a goal name and target amount', 'error'); return;
-    }
+    if (!goalName.trim() || !goalTarget) { push('Please enter a goal name and target amount', 'error'); return; }
     const { error } = await addGoal({
       name: goalName.trim(), target_amount: goalTarget,
       current_amount: goalCurrent || 0, target_date: goalDate || null,
@@ -120,9 +178,7 @@ export default function Dashboard() {
   }
 
   async function handleContribution(goalId) {
-    if (!goalContribution || Number(goalContribution) <= 0) {
-      push('Please enter a valid amount', 'error'); return;
-    }
+    if (!goalContribution || Number(goalContribution) <= 0) { push('Please enter a valid amount', 'error'); return; }
     setSavingGoalId(goalId);
     const fn = goalAction === 'add' ? addMoneyToGoal : subtractMoneyFromGoal;
     const { error } = await fn(goalId, goalContribution);
@@ -157,29 +213,25 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* Financial Score */}
-      <div style={{ marginBottom: '1rem' }}>
+      {/* Financial Score with info button */}
+      <div style={{ position: 'relative', marginBottom: '1rem' }}>
         <FinancialScoreCard income={income} expense={expense} balance={balance} budgetStatus={budgetStatus} />
+        <button onClick={() => setShowScore(true)} style={{
+          position: 'absolute', top: 10, right: 10,
+          background: 'rgba(99,102,241,.15)', border: 'none', borderRadius: 8,
+          color: '#818cf8', padding: '4px 6px', cursor: 'pointer',
+          display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', fontWeight: 700
+        }}>
+          <Info size={12} /> How?
+        </button>
       </div>
 
       {/* View tabs */}
-      <ViewTabs view={view} onChange={(v) => setView(v)} />
+      <ViewTabs view={view} onChange={setView} />
 
-      {/* Period selector — custom to avoid date-fns parsing bugs */}
-      <div style={{ marginTop: '0.75rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '0.5rem' }}>
-        <button onClick={() => handlePeriodChange('prev')} style={{
-          background: '#1e293b', border: '1px solid #334155', borderRadius: 8,
-          color: '#94a3b8', width: 36, height: 36, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', cursor: 'pointer', flexShrink: 0
-        }}>‹</button>
-        <span style={{ fontWeight: 600, fontSize: '0.9375rem', color: '#f1f5f9', flex: 1, textAlign: 'center' }}>
-          {periodLabel()}
-        </span>
-        <button onClick={() => handlePeriodChange('next')} style={{
-          background: '#1e293b', border: '1px solid #334155', borderRadius: 8,
-          color: '#94a3b8', width: 36, height: 36, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', cursor: 'pointer', flexShrink: 0
-        }}>›</button>
+      {/* Period selector with calendar */}
+      <div style={{ marginTop: '0.75rem', marginBottom: '1rem' }}>
+        <PeriodSelector view={view} value={periodValue} onChange={periodChange} />
       </div>
 
       {/* Summary cards */}
@@ -215,9 +267,7 @@ export default function Dashboard() {
             <button type="submit" style={{
               background: '#22c55e', color: '#fff', border: 'none',
               borderRadius: 8, padding: '0.75rem', fontWeight: 700, cursor: 'pointer'
-            }}>
-              Save Goal
-            </button>
+            }}>Save Goal</button>
           </form>
         )}
 
@@ -234,10 +284,13 @@ export default function Dashboard() {
               const completed  = percentage >= 100;
               const color      = completed ? '#22c55e' : percentage > 75 ? '#f59e0b' : '#818cf8';
 
+              // Pace estimator
+              const pace = estimatePace(goal, transactions);
+
               return (
                 <div key={goal.id} className="card" style={{ borderColor: completed ? 'rgba(34,197,94,.3)' : undefined }}>
 
-                  {/* Goal header */}
+                  {/* Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                     <div>
                       <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{goal.name}</strong>
@@ -260,68 +313,90 @@ export default function Dashboard() {
                     <div style={{ width: `${percentage}%`, height: '100%', background: color, borderRadius: 999, transition: 'width .4s ease' }} />
                   </div>
 
-                  {/* Footer */}
+                  {/* Footer row */}
                   <div style={{ marginTop: '0.4rem', display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '0.8rem' }}>
                     <span>{percentage.toFixed(0)}% — ${Math.max(target - current, 0).toFixed(2)} left</span>
                     <span>{goal.target_date ? 'By ' + goal.target_date : 'No date'}</span>
                   </div>
 
+                  {/* ── Pace estimator ── */}
+                  {!completed && (
+                    <div style={{
+                      marginTop: '0.625rem', background: 'rgba(129,140,248,.07)',
+                      border: '1px solid rgba(129,140,248,.15)', borderRadius: 8,
+                      padding: '0.5rem 0.75rem', fontSize: '0.8rem'
+                    }}>
+                      {!pace ? (
+                        <span style={{ color: '#475569' }}>Start contributing to get an estimate</span>
+                      ) : !pace.hasData ? (
+                        <span style={{ color: '#475569' }}>Start contributing to get an estimate</span>
+                      ) : (
+                        <span style={{ color: '#818cf8' }}>
+                          🕐 At this pace (<strong>${pace.avgPerDay.toFixed(2)}/day</strong>), you'll reach this goal in{' '}
+                          <strong>{pace.daysLeft > 365
+                            ? `~${Math.round(pace.daysLeft / 365)} year${pace.daysLeft > 730 ? 's' : ''}`
+                            : pace.daysLeft > 30
+                            ? `~${Math.round(pace.daysLeft / 30)} months`
+                            : `${pace.daysLeft} days`
+                          }</strong>
+                        </span>
+                      )}
+                    </div>
+                  )}
+
                   {/* Add / Subtract money */}
-                  <div style={{ marginTop: '0.75rem' }}>
-                    {activeGoalId === goal.id ? (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                        {/* Add / Subtract toggle */}
-                        <div style={{ display: 'flex', background: '#0f172a', borderRadius: 8, padding: 3, gap: 3 }}>
-                          {[
-                            { val: 'add',      label: '+ Add',     color: '#22c55e' },
-                            { val: 'subtract', label: '− Correct', color: '#f43f5e' },
-                          ].map((opt) => (
-                            <button key={opt.val} onClick={() => setGoalAction(opt.val)} style={{
-                              flex: 1, padding: '0.4rem', borderRadius: 6, border: 'none', cursor: 'pointer',
-                              background: goalAction === opt.val ? (opt.val === 'add' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)') : 'transparent',
-                              color: goalAction === opt.val ? opt.color : '#475569',
-                              fontWeight: 700, fontSize: '0.8rem', fontFamily: 'inherit'
+                  {!completed && (
+                    <div style={{ marginTop: '0.75rem' }}>
+                      {activeGoalId === goal.id ? (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                          <div style={{ display: 'flex', background: '#0f172a', borderRadius: 8, padding: 3, gap: 3 }}>
+                            {[
+                              { val: 'add',      label: '+ Add',     color: '#22c55e' },
+                              { val: 'subtract', label: '− Correct', color: '#f43f5e' },
+                            ].map((opt) => (
+                              <button key={opt.val} onClick={() => setGoalAction(opt.val)} style={{
+                                flex: 1, padding: '0.4rem', borderRadius: 6, border: 'none', cursor: 'pointer',
+                                background: goalAction === opt.val
+                                  ? (opt.val === 'add' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)')
+                                  : 'transparent',
+                                color: goalAction === opt.val ? opt.color : '#475569',
+                                fontWeight: 700, fontSize: '0.8rem', fontFamily: 'inherit'
+                              }}>{opt.label}</button>
+                            ))}
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                            <input
+                              type="number" inputMode="decimal"
+                              placeholder={goalAction === 'add' ? 'Amount to add ($)' : 'Amount to remove ($)'}
+                              value={goalContribution}
+                              onChange={(e) => setGoalContribution(e.target.value)}
+                              style={{ flex: 1 }} autoFocus
+                            />
+                            <button onClick={() => handleContribution(goal.id)} disabled={savingGoalId === goal.id} style={{
+                              background: goalAction === 'add' ? '#22c55e' : '#f43f5e',
+                              color: '#fff', border: 'none', borderRadius: 8,
+                              padding: '0.5rem 0.875rem', fontWeight: 700, cursor: 'pointer',
+                              opacity: savingGoalId === goal.id ? 0.6 : 1, whiteSpace: 'nowrap'
                             }}>
-                              {opt.label}
+                              {savingGoalId === goal.id ? '…' : goalAction === 'add' ? 'Add' : 'Remove'}
                             </button>
-                          ))}
+                            <button onClick={() => { setActiveGoalId(null); setGoalContribution(''); }} style={{
+                              background: 'transparent', color: '#64748b',
+                              border: '1px solid #334155', borderRadius: 8,
+                              padding: '0.5rem 0.75rem', cursor: 'pointer'
+                            }}>✕</button>
+                          </div>
                         </div>
-                        {/* Amount input */}
-                        <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                          <input
-                            type="number" inputMode="decimal"
-                            placeholder={goalAction === 'add' ? 'Amount to add ($)' : 'Amount to remove ($)'}
-                            value={goalContribution}
-                            onChange={(e) => setGoalContribution(e.target.value)}
-                            style={{ flex: 1 }}
-                            autoFocus
-                          />
-                          <button onClick={() => handleContribution(goal.id)} disabled={savingGoalId === goal.id} style={{
-                            background: goalAction === 'add' ? '#22c55e' : '#f43f5e',
-                            color: '#fff', border: 'none', borderRadius: 8,
-                            padding: '0.5rem 0.875rem', fontWeight: 700, cursor: 'pointer',
-                            opacity: savingGoalId === goal.id ? 0.6 : 1, whiteSpace: 'nowrap'
-                          }}>
-                            {savingGoalId === goal.id ? '…' : goalAction === 'add' ? 'Add' : 'Remove'}
-                          </button>
-                          <button onClick={() => { setActiveGoalId(null); setGoalContribution(''); }} style={{
-                            background: 'transparent', color: '#64748b',
-                            border: '1px solid #334155', borderRadius: 8,
-                            padding: '0.5rem 0.75rem', cursor: 'pointer'
-                          }}>✕</button>
-                        </div>
-                      </div>
-                    ) : (
-                      <button onClick={() => { setActiveGoalId(goal.id); setGoalAction('add'); }} style={{
-                        background: 'rgba(129,140,248,.15)', color: '#818cf8',
-                        border: '1px solid rgba(129,140,248,.3)', borderRadius: 8,
-                        padding: '0.5rem 0.875rem', fontWeight: 600, fontSize: '0.85rem',
-                        cursor: 'pointer', width: '100%'
-                      }}>
-                        + Add / Adjust Money
-                      </button>
-                    )}
-                  </div>
+                      ) : (
+                        <button onClick={() => { setActiveGoalId(goal.id); setGoalAction('add'); }} style={{
+                          background: 'rgba(129,140,248,.15)', color: '#818cf8',
+                          border: '1px solid rgba(129,140,248,.3)', borderRadius: 8,
+                          padding: '0.5rem 0.875rem', fontWeight: 600, fontSize: '0.85rem',
+                          cursor: 'pointer', width: '100%'
+                        }}>+ Add / Adjust Money</button>
+                      )}
+                    </div>
+                  )}
 
                 </div>
               );
@@ -389,6 +464,8 @@ export default function Dashboard() {
         <TransactionForm initial={editing} onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }} />
       )}
+
+      {showScore && <ScoreExplainer onClose={() => setShowScore(false)} />}
     </div>
   );
 }
