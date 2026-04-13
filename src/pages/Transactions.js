@@ -5,19 +5,27 @@ import { TransactionForm } from '../components/transactions/TransactionForm';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useTransactions } from '../hooks/useTransactions';
 import { useToast } from '../components/ui/Toast';
+import { useBudgets } from '../hooks/useBudgets';
+import { useAccounts } from '../hooks/useAccounts';
 import { filterBySearch } from '../lib/finance';
+import { computeBalanceSplit } from '../lib/balanceEngine';
 import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../lib/constants';
 
 const ALL_CATS = [{ value: '', label: 'All Categories', icon: '🗂️' }, ...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
 
 export default function Transactions() {
   const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
-  const { push } = useToast();
-  const [showForm, setShowForm] = useState(false);
-  const [editing,  setEditing]  = useState(null);
-  const [query,    setQuery]    = useState('');
-  const [typeFilter, setTypeFilter]   = useState('');
-  const [catFilter,  setCatFilter]    = useState('');
+  const { budgets }                  = useBudgets();
+  const { accounts }                 = useAccounts();
+  const { push }                     = useToast();
+
+  const [showForm,    setShowForm]    = useState(false);
+  const [editing,     setEditing]     = useState(null);
+  const [query,       setQuery]       = useState('');
+  const [typeFilter,  setTypeFilter]  = useState('');
+  const [catFilter,   setCatFilter]   = useState('');
+
+  const { availableBalance } = computeBalanceSplit(transactions);
 
   let list = transactions;
   if (query)      list = filterBySearch(list, query);
@@ -42,7 +50,7 @@ export default function Transactions() {
         <h1>Transactions</h1>
         <button onClick={() => { setEditing(null); setShowForm(true); }} style={{
           background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
-          width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center'
+          width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
         }}>
           <Plus size={20} strokeWidth={2.5} />
         </button>
@@ -51,11 +59,9 @@ export default function Transactions() {
       {/* Search */}
       <div style={{ position: 'relative', marginBottom: '0.75rem' }}>
         <Search size={16} style={{ position: 'absolute', left: '0.875rem', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
-        <input
-          type="text" placeholder="Search by description or category…"
+        <input type="text" placeholder="Search by description or category…"
           value={query} onChange={(e) => setQuery(e.target.value)}
-          style={{ paddingLeft: '2.5rem' }}
-        />
+          style={{ paddingLeft: '2.5rem' }} />
       </div>
 
       {/* Filters */}
@@ -63,7 +69,7 @@ export default function Transactions() {
         {['', 'income', 'expense'].map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} style={{
             padding: '0.4rem 0.875rem', borderRadius: 20, border: 'none', fontWeight: 600,
-            fontSize: '0.8rem', whiteSpace: 'nowrap', flexShrink: 0,
+            fontSize: '0.8rem', whiteSpace: 'nowrap', flexShrink: 0, cursor: 'pointer',
             background: typeFilter === t
               ? (t === 'income' ? 'rgba(34,197,94,.2)' : t === 'expense' ? 'rgba(244,63,94,.2)' : '#334155')
               : '#1e293b',
@@ -83,15 +89,14 @@ export default function Transactions() {
         </select>
       </div>
 
-      {/* Count */}
       <p style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '0.75rem' }}>
         {list.length} transaction{list.length !== 1 ? 's' : ''}
       </p>
 
-      {/* List */}
       {list.length === 0
         ? <EmptyState icon="🔍" title="No results" subtitle={query ? 'Try a different search term' : 'Add your first transaction'} />
-        : <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+        : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {list.map((t) => (
               <TransactionItem key={t.id} transaction={t}
                 onEdit={(t) => { setEditing(t); setShowForm(true); }}
@@ -99,13 +104,16 @@ export default function Transactions() {
               />
             ))}
           </div>
-      }
+        )}
 
       {showForm && (
         <TransactionForm
           initial={editing}
           onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
+          availableBalance={availableBalance}
+          budgets={budgets}
+          accounts={accounts}
         />
       )}
     </div>
