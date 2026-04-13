@@ -6,20 +6,22 @@ import { useToast } from '../ui/Toast';
 const EMPTY = {
   type: 'expense', amount: '', category: 'food',
   date: new Date().toISOString().slice(0, 10),
-  description: '', nature: 'variable'
+  description: '', nature: 'variable', savings_allocation: ''
 };
 
-export function TransactionForm({ initial, onSave, onClose }) {
-  const { push } = useToast();
-  const [form, setForm]     = useState(initial ? { ...initial, amount: String(initial.amount) } : EMPTY);
+export function TransactionForm({ initial, onSave, onClose, availableBalance, budgets = [] }) {
+  const { push }    = useToast();
+  const [form, setForm]   = useState(initial
+    ? { ...initial, amount: String(initial.amount), savings_allocation: String(initial.savings_allocation || '') }
+    : EMPTY);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState({});
 
   useEffect(() => {
-    // reset category when type changes
     setForm((f) => ({
       ...f,
-      category: f.type === 'income' ? 'salary' : 'food'
+      category: f.type === 'income' ? 'salary' : 'food',
+      savings_allocation: f.type === 'income' ? f.savings_allocation : ''
     }));
     // eslint-disable-next-line
   }, [form.type]);
@@ -33,13 +35,24 @@ export function TransactionForm({ initial, onSave, onClose }) {
 
   function validate() {
     const e = {};
-    if (!form.amount || isNaN(Number(form.amount)) || Number(form.amount) <= 0)
-      e.amount = 'Enter a valid amount greater than 0';
-    if (!form.date) e.date = 'Date is required';
+    const amt = Number(form.amount);
+    if (!form.amount || isNaN(amt) || amt <= 0) e.amount = 'Enter a valid amount greater than 0';
+    if (!form.date)     e.date     = 'Date is required';
     if (!form.category) e.category = 'Category is required';
-    if (!form.type) e.type = 'Type is required';
+    if (form.type === 'income' && form.savings_allocation !== '') {
+      const sav = Number(form.savings_allocation);
+      if (isNaN(sav) || sav < 0)    e.savings_allocation = 'Savings must be 0 or more';
+      if (sav > amt)                 e.savings_allocation = 'Savings cannot exceed income amount';
+    }
     return e;
   }
+
+  // Budget overspend warning for expenses
+  const showWarning = form.type === 'expense' && form.amount && availableBalance != null;
+  const amt = Number(form.amount) || 0;
+  const budget = budgets.find((b) => b.category === form.category);
+  const willExceedBal = showWarning && amt > availableBalance;
+  const willExceedBud = showWarning && budget && amt > (budget.amount_limit - (budget.spent || 0));
 
   async function handleSubmit() {
     const e = validate();
@@ -47,12 +60,15 @@ export function TransactionForm({ initial, onSave, onClose }) {
     setSaving(true);
     try {
       await onSave({
-        type: form.type,
-        amount: parseFloat(Number(form.amount).toFixed(2)),
-        category: form.category,
-        date: form.date,
+        type:       form.type,
+        amount:     parseFloat(Number(form.amount).toFixed(2)),
+        category:   form.category,
+        date:       form.date,
         description: form.description.trim(),
-        nature: form.nature
+        nature:     form.nature,
+        savings_allocation: form.type === 'income' && form.savings_allocation !== ''
+          ? parseFloat(Number(form.savings_allocation).toFixed(2))
+          : 0,
       });
       push(initial ? 'Transaction updated' : 'Transaction saved');
       onClose();
@@ -63,85 +79,111 @@ export function TransactionForm({ initial, onSave, onClose }) {
     }
   }
 
+  const inputStyle = {
+    background: '#0f172a', border: '1px solid #334155', borderRadius: 10,
+    color: '#f1f5f9', padding: '0.75rem 1rem', fontSize: '1rem',
+    width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box'
+  };
+
   return (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 500,
-      background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)',
+      background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(4px)',
       display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
     }} onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div style={{
         background: '#1e293b', borderRadius: '20px 20px 0 0',
-        border: '1px solid #334155', borderBottom: 'none',
-        width: '100%', maxWidth: 600, padding: '1.5rem 1.25rem',
+        border: '1px solid #334155', width: '100%', maxWidth: 600,
+        padding: '1.5rem 1.25rem',
         paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))',
         maxHeight: '92dvh', overflowY: 'auto'
       }}>
-        {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ color: '#f1f5f9' }}>{initial ? 'Edit Transaction' : 'New Transaction'}</h2>
-          <button onClick={onClose} className="btn-icon"><X size={20} /></button>
+          <button onClick={onClose} style={{ background: '#334155', border: 'none', borderRadius: 8, color: '#94a3b8', width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>✕</button>
         </div>
 
         {/* Type toggle */}
         <div style={{ display: 'flex', background: '#0f172a', borderRadius: 10, padding: 4, marginBottom: '1.25rem' }}>
-          {['expense','income'].map((t) => (
+          {['expense', 'income'].map((t) => (
             <button key={t} onClick={() => set('type', t)} style={{
-              flex: 1, padding: '0.625rem', borderRadius: 8, fontWeight: 600,
-              fontSize: '0.9375rem', border: 'none', transition: 'all .2s',
-              background: form.type === t
-                ? (t === 'income' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)')
-                : 'transparent',
-              color: form.type === t
-                ? (t === 'income' ? '#22c55e' : '#f43f5e')
-                : '#64748b'
+              flex: 1, padding: '0.625rem', borderRadius: 8, border: 'none', cursor: 'pointer',
+              background: form.type === t ? (t === 'income' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)') : 'transparent',
+              color: form.type === t ? (t === 'income' ? '#22c55e' : '#f43f5e') : '#64748b',
+              fontWeight: 700, fontSize: '0.9375rem', fontFamily: 'inherit'
             }}>
               {t === 'income' ? '⬆ Income' : '⬇ Expense'}
             </button>
           ))}
         </div>
 
+        {/* Budget warning */}
+        {(willExceedBal || willExceedBud) && (
+          <div style={{ background: 'rgba(244,63,94,.1)', border: '1px solid rgba(244,63,94,.3)', borderRadius: 8, padding: '0.625rem 0.875rem', marginBottom: '1rem' }}>
+            <p style={{ fontSize: '0.8rem', color: '#f43f5e', fontWeight: 600, margin: 0 }}>
+              ⚠️ {willExceedBal
+                ? `This exceeds your available balance ($${availableBalance.toFixed(2)}).`
+                : `This will exceed your ${form.category} budget by $${(amt - (budget.amount_limit - (budget.spent || 0))).toFixed(2)}.`}
+            </p>
+          </div>
+        )}
+
         {/* Amount */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.4rem', fontWeight: 500 }}>Amount (USD)</label>
-          <input
-            type="number" inputMode="decimal" placeholder="0.00" value={form.amount}
+          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' }}>Amount (USD)</label>
+          <input type="number" inputMode="decimal" placeholder="0.00" value={form.amount}
             onChange={(e) => set('amount', e.target.value)}
-            style={{ fontSize: '1.375rem', fontWeight: 700, textAlign: 'center',
+            style={{ ...inputStyle, fontSize: '1.375rem', fontWeight: 800, textAlign: 'center',
               color: form.type === 'income' ? '#22c55e' : '#f43f5e',
-              borderColor: errors.amount ? '#f43f5e' : undefined }}
-          />
+              borderColor: errors.amount ? '#f43f5e' : '#334155' }} />
           {errors.amount && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.amount}</p>}
         </div>
 
+        {/* Savings allocation — only for income */}
+        {form.type === 'income' && (
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' }}>
+              Allocate to Savings ($) <span style={{ color: '#475569', fontWeight: 400 }}>— optional</span>
+            </label>
+            <input type="number" inputMode="decimal" placeholder="0.00 — how much goes to savings?"
+              value={form.savings_allocation}
+              onChange={(e) => set('savings_allocation', e.target.value)}
+              style={{ ...inputStyle, color: '#818cf8', borderColor: errors.savings_allocation ? '#f43f5e' : '#334155' }} />
+            {form.savings_allocation && !errors.savings_allocation && Number(form.amount) > 0 && (
+              <p style={{ fontSize: '0.75rem', color: '#818cf8', marginTop: '0.25rem' }}>
+                ${(Number(form.amount) - Number(form.savings_allocation || 0)).toFixed(2)} will be available to spend
+              </p>
+            )}
+            {errors.savings_allocation && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.savings_allocation}</p>}
+          </div>
+        )}
+
         {/* Date */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.4rem', fontWeight: 500 }}>Date</label>
+          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' }}>Date</label>
           <input type="date" value={form.date} onChange={(e) => set('date', e.target.value)}
-            style={{ borderColor: errors.date ? '#f43f5e' : undefined }} />
-          {errors.date && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.date}</p>}
+            style={{ ...inputStyle, borderColor: errors.date ? '#f43f5e' : '#334155' }} />
         </div>
 
         {/* Category */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.4rem', fontWeight: 500 }}>Category</label>
-          <select value={form.category} onChange={(e) => set('category', e.target.value)}>
-            {cats.map((c) => (
-              <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
-            ))}
+          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' }}>Category</label>
+          <select value={form.category} onChange={(e) => set('category', e.target.value)} style={inputStyle}>
+            {cats.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
           </select>
         </div>
 
         {/* Nature */}
         <div style={{ marginBottom: '1rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.4rem', fontWeight: 500 }}>Nature</label>
+          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' }}>Nature</label>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {NATURE_OPTIONS.map((n) => (
               <button key={n.value} onClick={() => set('nature', n.value)} style={{
-                flex: 1, padding: '0.625rem', borderRadius: 8, fontWeight: 600,
-                fontSize: '0.875rem', border: '1px solid',
-                borderColor: form.nature === n.value ? '#818cf8' : '#334155',
+                flex: 1, padding: '0.625rem', borderRadius: 8,
+                border: `1px solid ${form.nature === n.value ? '#818cf8' : '#334155'}`,
                 background: form.nature === n.value ? 'rgba(129,140,248,.15)' : 'transparent',
-                color: form.nature === n.value ? '#818cf8' : '#64748b'
+                color: form.nature === n.value ? '#818cf8' : '#64748b',
+                fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', fontFamily: 'inherit'
               }}>
                 {n.label}
               </button>
@@ -151,13 +193,17 @@ export function TransactionForm({ initial, onSave, onClose }) {
 
         {/* Description */}
         <div style={{ marginBottom: '1.5rem' }}>
-          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', marginBottom: '0.4rem', fontWeight: 500 }}>Description (optional)</label>
+          <label style={{ display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' }}>Description (optional)</label>
           <input type="text" placeholder="Add a note…" value={form.description}
-            onChange={(e) => set('description', e.target.value)} />
+            onChange={(e) => set('description', e.target.value)} style={inputStyle} />
         </div>
 
-        <button className="btn-primary" onClick={handleSubmit} disabled={saving}>
-          {saving ? 'Saving…' : (initial ? 'Update Transaction' : 'Save Transaction')}
+        <button onClick={handleSubmit} disabled={saving} style={{
+          background: '#6366f1', color: '#fff', border: 'none', borderRadius: 10,
+          padding: '0.875rem', fontWeight: 700, fontSize: '0.9375rem',
+          cursor: 'pointer', width: '100%', fontFamily: 'inherit', opacity: saving ? 0.6 : 1
+        }}>
+          {saving ? 'Saving…' : initial ? 'Update Transaction' : 'Save Transaction'}
         </button>
       </div>
     </div>
