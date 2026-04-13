@@ -2,13 +2,33 @@ import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './hooks/useAuth';
 import { ToastProvider } from './components/ui/Toast';
 import { BottomNav } from './components/layout/BottomNav';
+import { AccountSetupModal } from './components/accounts/AccountSetupModal';
+import { useAccounts } from './hooks/useAccounts';
 import Dashboard    from './pages/Dashboard';
 import Transactions from './pages/Transactions';
+import Accounts     from './pages/Accounts';
 import Budgets      from './pages/Budgets';
 import Reports      from './pages/Reports';
 import Settings     from './pages/Settings';
 import AuthPage     from './pages/AuthPage';
 import './styles/global.css';
+
+// ── First-time account setup guard ───────────────────────────────────────
+function AccountGuard({ children }) {
+  const { accounts, loading, addAccount } = useAccounts();
+
+  if (loading) return null;
+
+  // If user has no accounts, force them to create one
+  if (accounts.length === 0) {
+    async function handleFirstAccount(payload) {
+      await addAccount(payload);
+    }
+    return <AccountSetupModal onComplete={handleFirstAccount} isFirstTime={true} />;
+  }
+
+  return children;
+}
 
 function PrivateRoutes() {
   const { user, loading } = useAuth();
@@ -25,17 +45,20 @@ function PrivateRoutes() {
   if (!user) return <Navigate to="/auth" replace />;
 
   return (
-    <>
-      <Routes>
-        <Route path="/"             element={<Dashboard />} />
-        <Route path="/transactions" element={<Transactions />} />
-        <Route path="/budgets"      element={<Budgets />} />
-        <Route path="/reports"      element={<Reports />} />
-        <Route path="/settings"     element={<Settings />} />
-        <Route path="*"             element={<Navigate to="/" replace />} />
-      </Routes>
-      <BottomNav />
-    </>
+    <AccountGuard>
+      <>
+        <Routes>
+          <Route path="/"             element={<Dashboard />}    />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/accounts"     element={<Accounts />}     />
+          <Route path="/budgets"      element={<Budgets />}      />
+          <Route path="/reports"      element={<Reports />}      />
+          <Route path="/settings"     element={<Settings />}     />
+          <Route path="*"             element={<Navigate to="/" replace />} />
+        </Routes>
+        <BottomNav />
+      </>
+    </AccountGuard>
   );
 }
 

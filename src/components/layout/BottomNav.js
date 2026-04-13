@@ -1,12 +1,12 @@
-import { BarChart2, LayoutDashboard, List, Settings, Target } from 'lucide-react';
+import { BarChart2, LayoutDashboard, List, Settings, Target, Wallet } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const ITEMS = [
-  { to: '/',             Icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/',             Icon: LayoutDashboard, label: 'Dashboard'    },
   { to: '/transactions', Icon: List,            label: 'Transactions' },
-  { to: '/budgets',      Icon: Target,          label: 'Budgets' },
-  { to: '/reports',      Icon: BarChart2,       label: 'Reports' },
-  { to: '/settings',     Icon: Settings,        label: 'Settings' }
+  { to: '/accounts',     Icon: Wallet,          label: 'Accounts'     },
+  { to: '/budgets',      Icon: Target,          label: 'Budgets'      },
+  { to: '/reports',      Icon: BarChart2,       label: 'Reports'      },
 ];
 
 export function BottomNav() {
@@ -28,13 +28,13 @@ export function BottomNav() {
             flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center',
             justifyContent: 'center', gap: '0.2rem', textDecoration: 'none',
             color: isActive ? '#818cf8' : '#64748b',
-            fontSize: '0.65rem', fontWeight: 600, letterSpacing: '0.04em',
+            fontSize: '0.6rem', fontWeight: 600, letterSpacing: '0.04em',
             paddingTop: '0.5rem', transition: 'color 0.15s'
           })}
         >
           {({ isActive }) => (
             <>
-              <Icon size={22} strokeWidth={isActive ? 2.2 : 1.8} />
+              <Icon size={20} strokeWidth={isActive ? 2.2 : 1.8} />
               {label}
             </>
           )}
