@@ -16,33 +16,36 @@ export default function Budgets() {
   const { budgets, upsertBudget, deleteBudget } = useBudgets();
   const { transactions }                         = useTransactions();
   const { goals }                                = useSavingsGoals();
-  const { getPriorityMap, setPriority }          = useCategoryPriorities();
+  const { getPriorityMap }                       = useCategoryPriorities();
   const { push }                                 = useToast();
 
   const now     = new Date();
   const monthly = filterByMonth(transactions, getYear(now), getMonth(now));
-  const { availableBalance, totalSavings } = computeBalanceSplit(transactions);
+  const { availableBalance } = computeBalanceSplit(transactions);
 
   const statusList = computeBudgetStatus(monthly, budgets);
 
-  // Category actuals for smart budget
   const existingExpenses = {};
   for (const t of monthly.filter((x) => x.type === 'expense')) {
     existingExpenses[t.category] = (existingExpenses[t.category] || 0) + Number(t.amount);
   }
 
-  const [editCat,    setEditCat]    = useState(null);
-  const [limitInput, setLimitInput] = useState('');
-  const [showAdd,    setShowAdd]    = useState(false);
-  const [newCat,     setNewCat]     = useState('food');
-  const [newLimit,   setNewLimit]   = useState('');
-  const [rebalanced, setRebalanced] = useState(null);
+  const [editCat,      setEditCat]      = useState(null);
+  const [limitInput,   setLimitInput]   = useState('');
+  const [showAdd,      setShowAdd]      = useState(false);
+  const [newCat,       setNewCat]       = useState('food');
+  const [newLimit,     setNewLimit]     = useState('');
+  const [rebalanceLog, setRebalanceLog] = useState(null);
+  const [applying,     setApplying]     = useState(false);
 
   async function handleUpsert(category, limit) {
     const val = parseFloat(limit);
     if (!val || val <= 0) { push('Enter a valid amount', 'error'); return; }
-    try { await upsertBudget(category, val); push('Budget saved'); setEditCat(null); setShowAdd(false); setNewLimit(''); }
-    catch (e) { push(e.message, 'error'); }
+    try {
+      await upsertBudget(category, val);
+      push('Budget saved');
+      setEditCat(null); setShowAdd(false); setNewLimit('');
+    } catch (e) { push(e.message, 'error'); }
   }
 
   async function handleDelete(category) {
@@ -58,12 +61,35 @@ export default function Budgets() {
     push('Smart budgets applied ✓');
   }
 
-  function handleRebalance() {
-    const limits     = {};
+  // ── Auto-rebalance: calculates AND immediately saves to Supabase ──────
+  async function handleRebalance() {
+    if (budgets.length === 0) return;
+    setApplying(true);
+
+    const limits      = {};
     const priorityMap = getPriorityMap();
     for (const b of budgets) limits[b.category] = b.amount_limit;
+
     const result = rebalanceBudget({ limits, actuals: existingExpenses, priorities: priorityMap });
-    setRebalanced(result);
+
+    // Apply every adjusted limit directly to Supabase
+    let appliedCount = 0;
+    for (const [cat, newLimit] of Object.entries(result.result)) {
+      const original = limits[cat];
+      if (newLimit !== original && newLimit > 0) {
+        await upsertBudget(cat, newLimit);
+        appliedCount++;
+      }
+    }
+
+    setRebalanceLog({ message: result.message, changes: result.changes, appliedCount });
+    setApplying(false);
+
+    if (appliedCount > 0) {
+      push(`⚖️ ${appliedCount} budget${appliedCount > 1 ? 's' : ''} auto-adjusted ✓`);
+    } else {
+      push('All budgets already balanced — no changes needed', 'warning');
+    }
   }
 
   return (
@@ -90,23 +116,48 @@ export default function Budgets() {
         />
       </div>
 
-      {/* Rebalance button */}
+      {/* Auto-Rebalance button */}
       {budgets.length > 0 && (
-        <button onClick={handleRebalance} style={{
-          background: 'rgba(245,158,11,.12)', border: '1px solid rgba(245,158,11,.25)',
-          borderRadius: 10, padding: '0.625rem', color: '#f59e0b',
-          fontWeight: 700, fontSize: '0.85rem', cursor: 'pointer',
-          width: '100%', marginBottom: '1rem', fontFamily: 'inherit'
+        <button onClick={handleRebalance} disabled={applying} style={{
+          background: applying ? 'rgba(245,158,11,.06)' : 'rgba(245,158,11,.12)',
+          border: '1px solid rgba(245,158,11,.25)', borderRadius: 10, padding: '0.625rem',
+          color: '#f59e0b', fontWeight: 700, fontSize: '0.85rem', cursor: applying ? 'not-allowed' : 'pointer',
+          width: '100%', marginBottom: '1rem', fontFamily: 'inherit',
+          opacity: applying ? 0.7 : 1
         }}>
-          ⚖️ Auto-Rebalance Based on Priorities
+          {applying ? '⏳ Applying rebalance…' : '⚖️ Auto-Rebalance Based on Priorities'}
         </button>
       )}
 
-      {/* Rebalance result */}
-      {rebalanced && (
-        <div style={{ background: 'rgba(245,158,11,.08)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 12, padding: '0.875rem', marginBottom: '1rem' }}>
-          <p style={{ fontSize: '0.8rem', color: '#f59e0b', fontWeight: 600, marginBottom: '0.375rem' }}>Rebalance suggestion:</p>
-          <p style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: 1.5 }}>{rebalanced.message}</p>
+      {/* Rebalance result log */}
+      {rebalanceLog && (
+        <div style={{
+          background: rebalanceLog.appliedCount > 0 ? 'rgba(245,158,11,.08)' : 'rgba(34,197,94,.08)',
+          border: `1px solid ${rebalanceLog.appliedCount > 0 ? 'rgba(245,158,11,.2)' : 'rgba(34,197,94,.2)'}`,
+          borderRadius: 12, padding: '0.875rem', marginBottom: '1rem'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.375rem' }}>
+            <p style={{ fontSize: '0.8rem', color: rebalanceLog.appliedCount > 0 ? '#f59e0b' : '#22c55e', fontWeight: 700 }}>
+              {rebalanceLog.appliedCount > 0 ? `⚖️ ${rebalanceLog.appliedCount} budget${rebalanceLog.appliedCount > 1 ? 's' : ''} adjusted` : '✅ Already balanced'}
+            </p>
+            <button onClick={() => setRebalanceLog(null)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: 14 }}>✕</button>
+          </div>
+          <p style={{ fontSize: '0.8rem', color: '#94a3b8', lineHeight: 1.5 }}>{rebalanceLog.message}</p>
+
+          {/* Show individual changes */}
+          {rebalanceLog.changes.filter((c) => c.type === 'reduced').length > 0 && (
+            <div style={{ marginTop: '0.625rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+              {rebalanceLog.changes.filter((c) => c.type === 'reduced').map((c, i) => {
+                const meta = getCategoryMeta(c.cat);
+                return (
+                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.775rem' }}>
+                    <span style={{ color: '#cbd5e1' }}>{meta.icon} {meta.label}</span>
+                    <span style={{ color: '#f43f5e', fontWeight: 600 }}>-{formatUSD(c.by)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
