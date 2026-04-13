@@ -16,7 +16,7 @@ export default function Budgets() {
   const { budgets, upsertBudget, deleteBudget } = useBudgets();
   const { transactions }                         = useTransactions();
   const { goals }                                = useSavingsGoals();
-  const { getPriorityMap }                       = useCategoryPriorities();
+  const { priorities, getPriorityMap }           = useCategoryPriorities();
   const { push }                                 = useToast();
 
   const now     = new Date();
@@ -110,7 +110,7 @@ export default function Budgets() {
         <SmartBudgetPanel
           availableBalance={availableBalance}
           goals={goals}
-          categoryPriorities={[]}
+          categoryPriorities={priorities}
           existingExpenses={existingExpenses}
           onApplyBudget={applySmartBudget}
         />

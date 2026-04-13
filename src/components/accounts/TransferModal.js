@@ -6,24 +6,42 @@ function formatUSD(n) {
 }
 
 export function TransferModal({ accounts, balances, onSave, onClose }) {
-  const [fromId,  setFromId]  = useState(accounts[0]?.id || '');
-  const [toId,    setToId]    = useState(accounts[1]?.id || accounts[0]?.id || '');
-  const [amount,  setAmount]  = useState('');
-  const [date,    setDate]    = useState(new Date().toISOString().slice(0, 10));
-  const [note,    setNote]    = useState('');
-  const [saving,  setSaving]  = useState(false);
-  const [error,   setError]   = useState('');
+  // Default: first account as From, second as To
+  const [fromId, setFromId] = useState(accounts[0]?.id || '');
+  const [toId,   setToId]   = useState(accounts.length > 1 ? accounts[1]?.id : accounts[0]?.id || '');
+  const [amount, setAmount] = useState('');
+  const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10));
+  const [note,   setNote]   = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error,  setError]  = useState('');
 
-  const fromAcc   = accounts.find((a) => a.id === fromId);
-  const toAcc     = accounts.find((a) => a.id === toId);
-  const fromBal   = balances[fromId] || 0;
-  const amt       = Number(amount) || 0;
-  const willOver  = amt > fromBal;
+  // Always derive account objects from current state — never cache them
+  const fromAcc  = accounts.find((a) => a.id === fromId);
+  const toAcc    = accounts.find((a) => a.id === toId);
+  const fromBal  = balances[fromId] || 0;
+  const toBal    = balances[toId]   || 0;
+  const amt      = Number(amount) || 0;
+  const willOver = amt > fromBal;
+
+  function handleFromChange(newFromId) {
+    setFromId(newFromId);
+    setError('');
+    // If To is now the same as From, pick a different account
+    if (newFromId === toId) {
+      const other = accounts.find((a) => a.id !== newFromId);
+      if (other) setToId(other.id);
+    }
+  }
+
+  function handleToChange(newToId) {
+    setToId(newToId);
+    setError('');
+  }
 
   async function handleSave() {
-    if (!amount || amt <= 0)       { setError('Enter a valid amount'); return; }
-    if (fromId === toId)           { setError('Select two different accounts'); return; }
-    if (willOver)                  { setError(`Insufficient balance in ${fromAcc?.name} (${formatUSD(fromBal)})`); return; }
+    if (!amount || amt <= 0)  { setError('Enter a valid amount'); return; }
+    if (fromId === toId)       { setError('Select two different accounts'); return; }
+    if (willOver)              { setError(`Insufficient balance in ${fromAcc?.name} (${formatUSD(fromBal)})`); return; }
     setSaving(true);
     const { error: err } = await onSave({ from_account_id: fromId, to_account_id: toId, amount: amt, date, note });
     setSaving(false);
@@ -41,34 +59,38 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
           <button onClick={onClose} style={{ background: '#334155', border: 'none', borderRadius: 8, color: '#94a3b8', width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>✕</button>
         </div>
 
-        {/* From → To visual */}
+        {/* Visual preview — derived directly from fromAcc / toAcc */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1.25rem' }}>
           <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '0.75rem', border: `1px solid ${fromAcc?.color || '#334155'}44` }}>
             <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, marginBottom: '0.25rem' }}>FROM</p>
-            <p style={{ fontSize: '1.1rem' }}>{fromAcc?.icon} {fromAcc?.name}</p>
+            <p style={{ fontSize: '1.1rem' }}>{fromAcc?.icon} {fromAcc?.name || '—'}</p>
             <p style={{ fontSize: '0.8rem', color: fromBal >= 0 ? '#22c55e' : '#f43f5e', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(fromBal)}</p>
           </div>
           <ArrowRight size={20} color="#64748b" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '0.75rem', border: `1px solid ${toAcc?.color || '#334155'}44` }}>
             <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, marginBottom: '0.25rem' }}>TO</p>
-            <p style={{ fontSize: '1.1rem' }}>{toAcc?.icon} {toAcc?.name}</p>
-            <p style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(balances[toId] || 0)}</p>
+            <p style={{ fontSize: '1.1rem' }}>{toAcc?.icon} {toAcc?.name || '—'}</p>
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(toBal)}</p>
           </div>
         </div>
 
-        {/* From account */}
+        {/* From account selector */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>From Account</label>
-          <select value={fromId} onChange={(e) => { setFromId(e.target.value); setError(''); }} style={inputStyle}>
-            {accounts.map((a) => <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)})</option>)}
+          <select value={fromId} onChange={(e) => handleFromChange(e.target.value)} style={inputStyle}>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)})</option>
+            ))}
           </select>
         </div>
 
-        {/* To account */}
+        {/* To account selector — excludes fromId */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>To Account</label>
-          <select value={toId} onChange={(e) => { setToId(e.target.value); setError(''); }} style={inputStyle}>
-            {accounts.filter((a) => a.id !== fromId).map((a) => <option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+          <select value={toId} onChange={(e) => handleToChange(e.target.value)} style={inputStyle}>
+            {accounts.filter((a) => a.id !== fromId).map((a) => (
+              <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)})</option>
+            ))}
           </select>
         </div>
 
@@ -78,7 +100,7 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
           <input type="number" inputMode="decimal" placeholder="0.00" value={amount}
             onChange={(e) => { setAmount(e.target.value); setError(''); }}
             style={{ ...inputStyle, fontSize: '1.375rem', fontWeight: 800, textAlign: 'center', color: willOver ? '#f43f5e' : '#f1f5f9' }} />
-          {willOver && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Exceeds available balance of {formatUSD(fromBal)}</p>}
+          {willOver && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Exceeds available balance ({formatUSD(fromBal)})</p>}
         </div>
 
         {/* Date */}

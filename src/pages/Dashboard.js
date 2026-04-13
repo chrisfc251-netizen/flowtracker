@@ -1,6 +1,7 @@
-import { format, getMonth, getYear, addMonths, subMonths, addDays, subDays, parseISO, differenceInDays } from 'date-fns';
-import { Plus, Trash2, Info } from 'lucide-react';
+import { format, getMonth, getYear, addDays, subDays, addMonths, subMonths, parseISO, differenceInDays } from 'date-fns';
+import { Plus, Trash2, Info, Settings } from 'lucide-react';
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { SyncIndicator } from '../components/ui/SyncIndicator';
 import { BalanceSplitCards } from '../components/dashboard/BalanceSplitCards';
 import { CategoryBreakdown } from '../components/dashboard/CategoryBreakdown';
@@ -15,6 +16,8 @@ import { useTransactions } from '../hooks/useTransactions';
 import { useToast } from '../components/ui/Toast';
 import { useSavingsGoals } from '../hooks/useSavingsGoals';
 import { useBudgets } from '../hooks/useBudgets';
+import { useAccounts } from '../hooks/useAccounts';
+import { useTransfers } from '../hooks/useTransfers';
 import { useUserPreferences } from '../hooks/useUserPreferences';
 import {
   computeBudgetStatus, computeCategoryBreakdown, computeSummary,
@@ -65,10 +68,13 @@ function ScoreExplainer({ onClose }) {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const { transactions, syncState, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
   const { push }                                         = useToast();
   const { goals, loading: goalsLoading, addGoal, addMoneyToGoal, subtractMoneyFromGoal, deleteGoal } = useSavingsGoals();
-  const { budgets, upsertBudget }                        = useBudgets();
+  const { budgets }                                      = useBudgets();
+  const { accounts, computeAccountBalances }             = useAccounts();
+  const { transfers }                                    = useTransfers();
   const { prefs, updatePref }                            = useUserPreferences();
 
   const [view, setView]           = useState('monthly');
@@ -92,10 +98,11 @@ export default function Dashboard() {
   const [editGoalDate, setEditGoalDate]         = useState(null);
   const [newGoalDate, setNewGoalDate]           = useState('');
 
-  // ── Balance computations ──────────────────────────────────────────────
-  const { totalBalance, availableBalance, totalSavings, income, expense } = computeBalanceSplit(transactions);
+  // ── Balance ──────────────────────────────────────────────────────────
+  const { totalBalance, availableBalance, totalSavings } = computeBalanceSplit(transactions);
+  const { balances, savingsBreakdown } = computeAccountBalances(transactions, transfers);
 
-  // ── Period filter ─────────────────────────────────────────────────────
+  // ── Filter ───────────────────────────────────────────────────────────
   const filtered = (() => {
     if (view === 'daily') return filterByDay(transactions, dayVal);
     if (view === 'monthly') {
@@ -115,7 +122,7 @@ export default function Dashboard() {
   const periodValue  = view === 'daily' ? dayVal : view === 'monthly' ? monthVal : yearVal;
   const periodChange = view === 'daily' ? setDayVal : view === 'monthly' ? setMonthVal : setYearVal;
 
-  // ── Transaction handlers ──────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────
   async function handleDelete(id) {
     if (!window.confirm('Delete this transaction?')) return;
     try { await deleteTransaction(id); push('Transaction deleted', 'warning'); }
@@ -128,7 +135,6 @@ export default function Dashboard() {
     setEditing(null);
   }
 
-  // ── Goal handlers ─────────────────────────────────────────────────────
   async function handleAddGoal(e) {
     e.preventDefault();
     if (!goalName.trim() || !goalTarget) { push('Please enter a goal name and target amount', 'error'); return; }
@@ -159,20 +165,12 @@ export default function Dashboard() {
 
   async function handleUpdateGoalDate(goalId) {
     if (!newGoalDate) { push('Select a date', 'error'); return; }
-    const { useSavingsGoals: _, ...rest } = require('../hooks/useSavingsGoals');
-    // Update via supabase directly
-    const { supabase } = require('../lib/supabase');
-    const { useAuth }  = require('../hooks/useAuth');
-    const { data, error } = await (await import('../lib/supabase')).supabase
-      .from('savings_goals')
-      .update({ target_date: newGoalDate })
-      .eq('id', goalId)
-      .select().single();
+    const { supabase } = await import('../lib/supabase');
+    const { error } = await supabase.from('savings_goals').update({ target_date: newGoalDate }).eq('id', goalId);
     if (error) { push('Failed to update deadline', 'error'); return; }
     push('Deadline updated ✓');
     setEditGoalDate(null); setNewGoalDate('');
-    // Refetch goals
-    window.location.reload(); // simple refresh — works for now
+    window.location.reload();
   }
 
   return (
@@ -184,29 +182,39 @@ export default function Dashboard() {
           <h1 style={{ fontSize: '1.375rem' }}>FlowTracker</h1>
           <SyncIndicator state={syncState} />
         </div>
-        <button onClick={() => { setEditing(null); setShowForm(true); }} style={{
-          background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
-          width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 14px rgba(129,140,248,.4)', cursor: 'pointer'
-        }}>
-          <Plus size={22} strokeWidth={2.5} />
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {/* Settings gear icon */}
+          <button onClick={() => navigate('/settings')} style={{
+            background: '#1e293b', color: '#64748b', border: '1px solid #334155',
+            borderRadius: 12, width: 44, height: 44, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', cursor: 'pointer'
+          }}>
+            <Settings size={18} />
+          </button>
+          {/* Add transaction */}
+          <button onClick={() => { setEditing(null); setShowForm(true); }} style={{
+            background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
+            width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(129,140,248,.4)', cursor: 'pointer'
+          }}>
+            <Plus size={22} strokeWidth={2.5} />
+          </button>
+        </div>
       </div>
 
       {/* Financial Score */}
       <div style={{ position: 'relative', marginBottom: '1rem' }}>
         <FinancialScoreCard income={pIncome} expense={pExpense} balance={pBalance} budgetStatus={budgetStatus} />
         <button onClick={() => setShowScore(true)} style={{
-          position: 'absolute', top: 10, right: 10,
-          background: 'rgba(99,102,241,.15)', border: 'none', borderRadius: 8,
-          color: '#818cf8', padding: '4px 6px', cursor: 'pointer',
+          position: 'absolute', top: 10, right: 10, background: 'rgba(99,102,241,.15)',
+          border: 'none', borderRadius: 8, color: '#818cf8', padding: '4px 6px', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', fontWeight: 700
         }}>
           <Info size={12} /> How?
         </button>
       </div>
 
-      {/* Balance Split */}
+      {/* Balance Split with account breakdown */}
       <div style={{ marginBottom: '1rem' }}>
         <BalanceSplitCards
           totalBalance={totalBalance}
@@ -214,6 +222,9 @@ export default function Dashboard() {
           totalSavings={totalSavings}
           ghostMode={prefs.ghost_mode}
           onToggleGhost={() => updatePref('ghost_mode', !prefs.ghost_mode)}
+          accounts={accounts}
+          balances={balances}
+          savingsBreakdown={savingsBreakdown}
         />
       </div>
 
@@ -225,7 +236,7 @@ export default function Dashboard() {
         <PeriodSelector view={view} value={periodValue} onChange={periodChange} />
       </div>
 
-      {/* Financial Insights */}
+      {/* Insights */}
       <div style={{ marginBottom: '1rem' }}>
         <InsightsPanel transactions={filtered} goals={goals} budgets={budgetStatus} />
       </div>
@@ -235,7 +246,6 @@ export default function Dashboard() {
         <h3 style={{ marginBottom: '0.75rem', color: '#94a3b8', fontSize: '0.8rem', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
           Savings Goals
         </h3>
-
         <div style={{ marginBottom: '0.75rem' }}>
           <button onClick={() => setShowGoalForm((p) => !p)} style={{
             background: '#818cf8', color: '#fff', border: 'none', borderRadius: 8,
@@ -278,7 +288,7 @@ export default function Dashboard() {
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                       <span style={{ color: '#cbd5e1', fontSize: '0.85rem' }}>${current.toFixed(2)} / ${target.toFixed(2)}</span>
-                      <button onClick={() => handleDeleteGoal(goal.id, goal.name)} style={{ background: 'rgba(244,63,94,.12)', border: 'none', borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: '#f43f5e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <button onClick={() => handleDeleteGoal(goal.id, goal.name)} style={{ background: 'rgba(244,63,94,.12)', border: 'none', borderRadius: 6, padding: '4px 6px', cursor: 'pointer', color: '#f43f5e', display: 'flex', alignItems: 'center' }}>
                         <Trash2 size={14} />
                       </button>
                     </div>
@@ -290,40 +300,35 @@ export default function Dashboard() {
 
                   <div style={{ marginTop: '0.4rem', display: 'flex', justifyContent: 'space-between', color: '#64748b', fontSize: '0.8rem' }}>
                     <span>{percentage.toFixed(0)}% — ${Math.max(target - current, 0).toFixed(2)} left</span>
-                    {/* Deadline with edit option */}
-                    <span>
+                    <span onClick={() => { setEditGoalDate(goal.id); setNewGoalDate(goal.target_date || ''); }}
+                      style={{ cursor: 'pointer', borderBottom: '1px dashed #334155' }}>
                       {editGoalDate === goal.id ? (
-                        <span style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }}>
+                        <span style={{ display: 'flex', gap: '0.375rem', alignItems: 'center' }} onClick={(e) => e.stopPropagation()}>
                           <input type="date" value={newGoalDate} onChange={(e) => setNewGoalDate(e.target.value)}
                             style={{ fontSize: '0.75rem', padding: '2px 6px', background: '#0f172a', border: '1px solid #334155', borderRadius: 6, color: '#f1f5f9', fontFamily: 'inherit' }} />
                           <button onClick={() => handleUpdateGoalDate(goal.id)} style={{ fontSize: '0.7rem', background: '#22c55e', border: 'none', borderRadius: 5, padding: '2px 8px', color: '#fff', cursor: 'pointer' }}>✓</button>
                           <button onClick={() => setEditGoalDate(null)} style={{ fontSize: '0.7rem', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>✕</button>
                         </span>
                       ) : (
-                        <span onClick={() => { setEditGoalDate(goal.id); setNewGoalDate(goal.target_date || ''); }}
-                          style={{ cursor: 'pointer', borderBottom: '1px dashed #334155' }}>
-                          {goal.target_date ? 'By ' + goal.target_date : 'Set deadline ✏️'}
-                        </span>
+                        goal.target_date ? 'By ' + goal.target_date : 'Set deadline ✏️'
                       )}
                     </span>
                   </div>
 
-                  {/* Pace estimator */}
                   {!completed && (
                     <div style={{ marginTop: '0.625rem', background: 'rgba(129,140,248,.07)', border: '1px solid rgba(129,140,248,.15)', borderRadius: 8, padding: '0.5rem 0.75rem', fontSize: '0.8rem' }}>
                       {!pace || !pace.hasData ? (
                         <span style={{ color: '#475569' }}>Start contributing to get a pace estimate</span>
                       ) : (
                         <span style={{ color: '#818cf8' }}>
-                          🕐 At ${pace.avgPerDay.toFixed(2)}/day → reach this goal in <strong>
+                          🕐 ${pace.avgPerDay.toFixed(2)}/day → <strong>
                             {pace.daysLeft > 365 ? `~${Math.round(pace.daysLeft/365)}yr` : pace.daysLeft > 30 ? `~${Math.round(pace.daysLeft/30)}mo` : `${pace.daysLeft}d`}
-                          </strong>
+                          </strong> to reach this goal
                         </span>
                       )}
                     </div>
                   )}
 
-                  {/* Add/Subtract money */}
                   {!completed && (
                     <div style={{ marginTop: '0.75rem' }}>
                       {activeGoalId === goal.id ? (
@@ -370,7 +375,6 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Goal Roadmap */}
       {goals.length > 0 && <div style={{ marginTop: '1.25rem' }}><GoalSuggestions goals={goals} /></div>}
 
       {/* Category breakdown */}
@@ -422,10 +426,12 @@ export default function Dashboard() {
 
       {showForm && (
         <TransactionForm
-          initial={editing} onSave={handleSave}
+          initial={editing}
+          onSave={handleSave}
           onClose={() => { setShowForm(false); setEditing(null); }}
           availableBalance={availableBalance}
           budgets={budgetStatus}
+          accounts={accounts}
         />
       )}
 
