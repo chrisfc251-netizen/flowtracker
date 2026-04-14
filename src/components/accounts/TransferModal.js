@@ -21,7 +21,8 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
   const fromBal  = balances[fromId] || 0;
   const toBal    = balances[toId]   || 0;
   const amt      = Number(amount) || 0;
-  const willOver = amt > fromBal;
+  const noBalance = fromBal <= 0;
+  const willOver  = noBalance || amt > fromBal;
 
   function handleFromChange(newFromId) {
     setFromId(newFromId);
@@ -100,7 +101,7 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
           <input type="number" inputMode="decimal" placeholder="0.00" value={amount}
             onChange={(e) => { setAmount(e.target.value); setError(''); }}
             style={{ ...inputStyle, fontSize: '1.375rem', fontWeight: 800, textAlign: 'center', color: willOver ? '#f43f5e' : '#f1f5f9' }} />
-          {willOver && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Exceeds available balance ({formatUSD(fromBal)})</p>}
+          {noBalance ? <p style={{ color: "#f43f5e", fontSize: "0.75rem", marginTop: "0.25rem" }}>⚠️ {fromAcc?.name} has no balance to transfer</p> : willOver && <p style={{ color: "#f43f5e", fontSize: "0.75rem", marginTop: "0.25rem" }}>⚠️ Exceeds available balance ({formatUSD(fromBal)})</p>}
         </div>
 
         {/* Date */}
