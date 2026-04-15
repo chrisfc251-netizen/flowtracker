@@ -1,12 +1,12 @@
-import { BarChart2, LayoutDashboard, List, Settings, Target, Wallet } from 'lucide-react';
+import { BarChart2, LayoutDashboard, List, Target, Wallet, Receipt } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 const ITEMS = [
   { to: '/',             Icon: LayoutDashboard, label: 'Dashboard'    },
   { to: '/transactions', Icon: List,            label: 'Transactions' },
   { to: '/accounts',     Icon: Wallet,          label: 'Accounts'     },
+  { to: '/bills',        Icon: Receipt,         label: 'Bills'        },
   { to: '/budgets',      Icon: Target,          label: 'Budgets'      },
-  { to: '/reports',      Icon: BarChart2,       label: 'Reports'      },
 ];
 
 export function BottomNav() {

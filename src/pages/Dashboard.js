@@ -1,4 +1,4 @@
-import { format, getMonth, getYear, addDays, subDays, addMonths, subMonths, parseISO, differenceInDays } from 'date-fns';
+import { format, getMonth, getYear, subDays, differenceInDays } from 'date-fns';
 import { Plus, Trash2, Info, Settings } from 'lucide-react';
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -9,6 +9,8 @@ import { PeriodSelector, ViewTabs } from '../components/dashboard/PeriodSelector
 import { FinancialScoreCard } from '../components/dashboard/FinancialScoreCard';
 import { InsightsPanel } from '../components/insights/InsightsPanel';
 import { GoalSuggestions } from '../components/dashboard/GoalSuggestions';
+import { CashFlowCard } from '../components/dashboard/CashFlowCard';
+import { CanIAffordIt } from '../components/dashboard/CanIAffordIt';
 import { TransactionForm } from '../components/transactions/TransactionForm';
 import { TransactionItem } from '../components/transactions/TransactionItem';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -19,6 +21,7 @@ import { useBudgets } from '../hooks/useBudgets';
 import { useAccounts } from '../hooks/useAccounts';
 import { useTransfers } from '../hooks/useTransfers';
 import { useUserPreferences } from '../hooks/useUserPreferences';
+import { useFixedExpenses } from '../hooks/useFixedExpenses';
 import {
   computeBudgetStatus, computeCategoryBreakdown, computeSummary,
   filterByDay, filterByMonth, filterByYear
@@ -76,6 +79,7 @@ export default function Dashboard() {
   const { accounts, computeAccountBalances }             = useAccounts();
   const { transfers }                                    = useTransfers();
   const { prefs, updatePref }                            = useUserPreferences();
+  const { expenses: fixedExpenses }                      = useFixedExpenses();
 
   const [view, setView]           = useState('monthly');
   const [dayVal, setDayVal]       = useState(getTodayStr);
@@ -85,6 +89,7 @@ export default function Dashboard() {
   const [editing, setEditing]     = useState(null);
   const [activeTab, setActiveTab] = useState('expense');
   const [showScore, setShowScore] = useState(false);
+  const [showAffordIt, setShowAffordIt] = useState(false);
 
   const [showGoalForm, setShowGoalForm]         = useState(false);
   const [goalName, setGoalName]                 = useState('');
@@ -183,7 +188,6 @@ export default function Dashboard() {
           <SyncIndicator state={syncState} />
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          {/* Settings gear icon */}
           <button onClick={() => navigate('/settings')} style={{
             background: '#1e293b', color: '#64748b', border: '1px solid #334155',
             borderRadius: 12, width: 44, height: 44, display: 'flex', alignItems: 'center',
@@ -191,7 +195,6 @@ export default function Dashboard() {
           }}>
             <Settings size={18} />
           </button>
-          {/* Add transaction */}
           <button onClick={() => { setEditing(null); setShowForm(true); }} style={{
             background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
             width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -206,15 +209,16 @@ export default function Dashboard() {
       <div style={{ position: 'relative', marginBottom: '1rem' }}>
         <FinancialScoreCard income={pIncome} expense={pExpense} balance={pBalance} budgetStatus={budgetStatus} />
         <button onClick={() => setShowScore(true)} style={{
-          position: 'absolute', top: 10, right: 10, background: 'rgba(99,102,241,.15)',
-          border: 'none', borderRadius: 8, color: '#818cf8', padding: '4px 6px', cursor: 'pointer',
+          position: 'absolute', top: 10, right: 10,
+          background: 'rgba(99,102,241,.15)', border: 'none', borderRadius: 8,
+          color: '#818cf8', padding: '4px 6px', cursor: 'pointer',
           display: 'flex', alignItems: 'center', gap: '0.25rem', fontSize: '0.7rem', fontWeight: 700
         }}>
           <Info size={12} /> How?
         </button>
       </div>
 
-      {/* Balance Split with account breakdown */}
+      {/* Balance Split */}
       <div style={{ marginBottom: '1rem' }}>
         <BalanceSplitCards
           totalBalance={totalBalance}
@@ -227,6 +231,27 @@ export default function Dashboard() {
           savingsBreakdown={savingsBreakdown}
         />
       </div>
+
+      {/* Cash Flow Card — safe spendable after upcoming bills */}
+      <div style={{ marginBottom: '1rem' }}>
+        <CashFlowCard
+          availableBalance={availableBalance}
+          fixedExpenses={fixedExpenses}
+          days={30}
+        />
+      </div>
+
+      {/* Can I Afford It button */}
+      <button onClick={() => setShowAffordIt(true)} style={{
+        background: 'rgba(129,140,248,.1)', color: '#818cf8',
+        border: '1px solid rgba(129,140,248,.25)', borderRadius: 12,
+        padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem',
+        cursor: 'pointer', width: '100%', marginBottom: '1rem',
+        fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', gap: '0.5rem'
+      }}>
+        🤔 Can I Afford It?
+      </button>
 
       {/* View tabs */}
       <ViewTabs view={view} onChange={setView} />
@@ -432,6 +457,16 @@ export default function Dashboard() {
           availableBalance={availableBalance}
           budgets={budgetStatus}
           accounts={accounts}
+        />
+      )}
+
+      {showAffordIt && (
+        <CanIAffordIt
+          availableBalance={availableBalance}
+          fixedExpenses={fixedExpenses}
+          budgets={budgetStatus}
+          goals={goals}
+          onClose={() => setShowAffordIt(false)}
         />
       )}
 

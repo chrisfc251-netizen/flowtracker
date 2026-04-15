@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Plus, Search } from 'lucide-react';
+import { useState, useMemo } from 'react';
+import { Plus, Search, ArrowUpDown } from 'lucide-react';
 import { TransactionItem } from '../components/transactions/TransactionItem';
 import { TransactionForm } from '../components/transactions/TransactionForm';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -13,24 +13,46 @@ import { EXPENSE_CATEGORIES, INCOME_CATEGORIES } from '../lib/constants';
 
 const ALL_CATS = [{ value: '', label: 'All Categories', icon: '🗂️' }, ...INCOME_CATEGORIES, ...EXPENSE_CATEGORIES];
 
+const SORT_OPTIONS = [
+  { value: 'newest',   label: 'Newest first'  },
+  { value: 'oldest',   label: 'Oldest first'  },
+  { value: 'highest',  label: 'Highest amount' },
+  { value: 'lowest',   label: 'Lowest amount'  },
+];
+
+function sortTransactions(list, sortBy) {
+  const copy = [...list];
+  switch (sortBy) {
+    case 'oldest':  return copy.sort((a, b) => new Date(a.date) - new Date(b.date));
+    case 'highest': return copy.sort((a, b) => Number(b.amount) - Number(a.amount));
+    case 'lowest':  return copy.sort((a, b) => Number(a.amount) - Number(b.amount));
+    default:        return copy.sort((a, b) => new Date(b.date) - new Date(a.date)); // newest
+  }
+}
+
 export default function Transactions() {
   const { transactions, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
-  const { budgets }                  = useBudgets();
-  const { accounts }                 = useAccounts();
-  const { push }                     = useToast();
+  const { budgets }  = useBudgets();
+  const { accounts } = useAccounts();
+  const { push }     = useToast();
 
-  const [showForm,    setShowForm]    = useState(false);
-  const [editing,     setEditing]     = useState(null);
-  const [query,       setQuery]       = useState('');
-  const [typeFilter,  setTypeFilter]  = useState('');
-  const [catFilter,   setCatFilter]   = useState('');
+  const [showForm,   setShowForm]   = useState(false);
+  const [editing,    setEditing]    = useState(null);
+  const [query,      setQuery]      = useState('');
+  const [typeFilter, setTypeFilter] = useState('');
+  const [catFilter,  setCatFilter]  = useState('');
+  const [sortBy,     setSortBy]     = useState('newest');
+  const [showSort,   setShowSort]   = useState(false);
 
   const { availableBalance } = computeBalanceSplit(transactions);
 
-  let list = transactions;
-  if (query)      list = filterBySearch(list, query);
-  if (typeFilter) list = list.filter((t) => t.type === typeFilter);
-  if (catFilter)  list = list.filter((t) => t.category === catFilter);
+  const list = useMemo(() => {
+    let result = transactions;
+    if (query)      result = filterBySearch(result, query);
+    if (typeFilter) result = result.filter((t) => t.type === typeFilter);
+    if (catFilter)  result = result.filter((t) => t.category === catFilter);
+    return sortTransactions(result, sortBy);
+  }, [transactions, query, typeFilter, catFilter, sortBy]);
 
   async function handleDelete(id) {
     if (!window.confirm('Delete this transaction?')) return;
@@ -43,6 +65,8 @@ export default function Transactions() {
     else         await addTransaction(payload);
     setEditing(null);
   }
+
+  const currentSort = SORT_OPTIONS.find((s) => s.value === sortBy);
 
   return (
     <div className="page">
@@ -64,8 +88,8 @@ export default function Transactions() {
           style={{ paddingLeft: '2.5rem' }} />
       </div>
 
-      {/* Filters */}
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem' }}>
+      {/* Filters + Sort */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', overflowX: 'auto', paddingBottom: '0.25rem', alignItems: 'center' }}>
         {['', 'income', 'expense'].map((t) => (
           <button key={t} onClick={() => setTypeFilter(t)} style={{
             padding: '0.4rem 0.875rem', borderRadius: 20, border: 'none', fontWeight: 600,
@@ -80,6 +104,7 @@ export default function Transactions() {
             {t === '' ? 'All' : t.charAt(0).toUpperCase() + t.slice(1)}
           </button>
         ))}
+
         <select value={catFilter} onChange={(e) => setCatFilter(e.target.value)} style={{
           flexShrink: 0, padding: '0.4rem 2rem 0.4rem 0.75rem', borderRadius: 20,
           fontSize: '0.8rem', fontWeight: 600, background: catFilter ? '#334155' : '#1e293b',
@@ -87,6 +112,38 @@ export default function Transactions() {
         }}>
           {ALL_CATS.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
         </select>
+
+        {/* Sort dropdown */}
+        <div style={{ position: 'relative', flexShrink: 0 }}>
+          <button onClick={() => setShowSort((p) => !p)} style={{
+            padding: '0.4rem 0.875rem', borderRadius: 20, border: 'none', fontWeight: 600,
+            fontSize: '0.8rem', whiteSpace: 'nowrap', cursor: 'pointer',
+            background: sortBy !== 'newest' ? '#334155' : '#1e293b',
+            color: sortBy !== 'newest' ? '#f1f5f9' : '#64748b',
+            display: 'flex', alignItems: 'center', gap: '0.375rem'
+          }}>
+            <ArrowUpDown size={12} /> {currentSort?.label}
+          </button>
+          {showSort && (
+            <div style={{
+              position: 'absolute', top: '110%', right: 0, background: '#1e293b',
+              border: '1px solid #334155', borderRadius: 10, overflow: 'hidden',
+              zIndex: 100, minWidth: 160, boxShadow: '0 8px 24px rgba(0,0,0,.4)'
+            }}>
+              {SORT_OPTIONS.map((opt) => (
+                <button key={opt.value} onClick={() => { setSortBy(opt.value); setShowSort(false); }} style={{
+                  display: 'block', width: '100%', padding: '0.625rem 1rem',
+                  background: sortBy === opt.value ? 'rgba(129,140,248,.15)' : 'transparent',
+                  color: sortBy === opt.value ? '#818cf8' : '#cbd5e1',
+                  border: 'none', textAlign: 'left', fontSize: '0.85rem',
+                  fontWeight: sortBy === opt.value ? 700 : 400, cursor: 'pointer', fontFamily: 'inherit'
+                }}>
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       <p style={{ fontSize: '0.8rem', color: '#475569', marginBottom: '0.75rem' }}>
