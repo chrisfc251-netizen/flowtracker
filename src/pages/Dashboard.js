@@ -402,6 +402,18 @@ export default function Dashboard() {
 
       {goals.length > 0 && <div style={{ marginTop: '1.25rem' }}><GoalSuggestions goals={goals} /></div>}
 
+      {/* Vacation Planner button */}
+      <button onClick={() => navigate('/vacation')} style={{
+        background: 'rgba(6,182,212,.1)', color: '#06b6d4',
+        border: '1px solid rgba(6,182,212,.25)', borderRadius: 12,
+        padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem',
+        cursor: 'pointer', width: '100%', marginTop: '1rem',
+        fontFamily: 'inherit', display: 'flex', alignItems: 'center',
+        justifyContent: 'center', gap: '0.5rem'
+      }}>
+        ✈️ Plan a Vacation
+      </button>
+
       {/* Category breakdown */}
       {breakdown.length > 0 && (
         <div className="card" style={{ marginTop: '1.25rem' }}>
