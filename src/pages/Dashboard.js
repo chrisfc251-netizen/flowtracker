@@ -22,6 +22,7 @@ import { useAccounts } from '../hooks/useAccounts';
 import { useTransfers } from '../hooks/useTransfers';
 import { useUserPreferences } from '../hooks/useUserPreferences';
 import { useFixedExpenses } from '../hooks/useFixedExpenses';
+import { useCategoryPriorities } from '../hooks/useCategoryPriorities';
 import {
   computeBudgetStatus, computeCategoryBreakdown, computeSummary,
   filterByDay, filterByMonth, filterByYear
@@ -75,7 +76,8 @@ export default function Dashboard() {
   const { transactions, syncState, addTransaction, updateTransaction, deleteTransaction } = useTransactions();
   const { push }                                         = useToast();
   const { goals, loading: goalsLoading, addGoal, addMoneyToGoal, subtractMoneyFromGoal, deleteGoal } = useSavingsGoals();
-  const { budgets }                                      = useBudgets();
+  const { getPriorityMap }                               = useCategoryPriorities();
+  const { budgets, effectiveBudgets }                    = useBudgets(getPriorityMap());
   const { accounts, computeAccountBalances }             = useAccounts();
   const { transfers }                                    = useTransfers();
   const { prefs, updatePref }                            = useUserPreferences();
@@ -477,6 +479,7 @@ export default function Dashboard() {
           availableBalance={availableBalance}
           fixedExpenses={fixedExpenses}
           budgets={budgetStatus}
+          effectiveBudgets={effectiveBudgets}
           goals={goals}
           onClose={() => setShowAffordIt(false)}
         />

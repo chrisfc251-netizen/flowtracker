@@ -1,11 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useMemo } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
+import { computeEffectiveBudgets } from '../lib/budgetEngine';
 
-export function useBudgets() {
+export function useBudgets(priorityMap = {}) {
   const { user } = useAuth();
-  const [budgets, setBudgets]   = useState([]);
-  const [loading, setLoading]   = useState(true);
+  const [budgets, setBudgets] = useState([]);
+  const [loading, setLoading] = useState(true);
 
   const fetchAll = useCallback(async () => {
     if (!user) return;
@@ -20,6 +21,13 @@ export function useBudgets() {
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
+  // ── Effective budgets (derived, never stored) ─────────────────────────
+  const effectiveBudgets = useMemo(
+    () => computeEffectiveBudgets(budgets, priorityMap),
+    [budgets, priorityMap]
+  );
+
+  // ── Upsert ────────────────────────────────────────────────────────────
   async function upsertBudget(category, amount_limit) {
     const existing = budgets.find((b) => b.category === category);
     if (existing) {
@@ -27,21 +35,36 @@ export function useBudgets() {
         .from('budgets')
         .update({ amount_limit })
         .eq('id', existing.id)
-        .select()
-        .single();
+        .select().single();
       if (error) throw error;
       setBudgets((prev) => prev.map((b) => (b.id === existing.id ? data : b)));
     } else {
       const { data, error } = await supabase
         .from('budgets')
-        .insert({ user_id: user.id, category, amount_limit })
-        .select()
-        .single();
+        .insert({ user_id: user.id, category, amount_limit, is_active: true })
+        .select().single();
       if (error) throw error;
       setBudgets((prev) => [...prev, data]);
     }
   }
 
+  // ── Toggle active / N/A ───────────────────────────────────────────────
+  const toggleActive = useCallback(async (category) => {
+    const existing = budgets.find((b) => b.category === category);
+    if (!existing) return;
+    const newActive = existing.is_active === false ? true : false;
+    const { data, error } = await supabase
+      .from('budgets')
+      .update({ is_active: newActive })
+      .eq('id', existing.id)
+      .eq('user_id', user.id)
+      .select().single();
+    if (error) return { error };
+    setBudgets((prev) => prev.map((b) => (b.id === existing.id ? data : b)));
+    return { data };
+  }, [budgets, user]);
+
+  // ── Delete ────────────────────────────────────────────────────────────
   async function deleteBudget(category) {
     const existing = budgets.find((b) => b.category === category);
     if (!existing) return;
@@ -49,5 +72,13 @@ export function useBudgets() {
     setBudgets((prev) => prev.filter((b) => b.id !== existing.id));
   }
 
-  return { budgets, loading, upsertBudget, deleteBudget, refresh: fetchAll };
+  return {
+    budgets,
+    effectiveBudgets,
+    loading,
+    upsertBudget,
+    deleteBudget,
+    toggleActive,
+    refresh: fetchAll,
+  };
 }
