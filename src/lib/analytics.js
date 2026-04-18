@@ -56,8 +56,16 @@ export function mostExpensiveWeekday(transactions) {
 }
 
 // ── Predicción fin de mes ────────────────────────────────────────────────
+//
+// FIX: projectedBalance now excludes savings_allocation so it only shows
+// money the user can actually spend — consistent with availableBalance
+// everywhere else in the app.
+//
+// Formula:
+//   projectedAvailable = income - savings - projectedExpenses
+//
 export function predictMonthEnd(transactions, year, month) {
-  const now       = new Date();
+  const now         = new Date();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const daysPassed  = now.getDate();
   const daysLeft    = daysInMonth - daysPassed;
@@ -67,21 +75,34 @@ export function predictMonthEnd(transactions, year, month) {
     return getMonth(d) === month && getYear(d) === year;
   });
 
-  const incSoFar = monthTx.filter((t) => t.type === 'income').reduce((s, t) => s + Number(t.amount), 0);
-  const expSoFar = monthTx.filter((t) => t.type === 'expense').reduce((s, t) => s + Number(t.amount), 0);
+  const incSoFar      = monthTx
+    .filter((t) => t.type === 'income')
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  const expSoFar      = monthTx
+    .filter((t) => t.type === 'expense')
+    .reduce((s, t) => s + Number(t.amount), 0);
+
+  // Sum of savings set aside this month (from income transactions)
+  const savingsSoFar  = monthTx
+    .filter((t) => t.type === 'income')
+    .reduce((s, t) => s + Number(t.savings_allocation || 0), 0);
 
   if (daysPassed === 0) return null;
 
-  const dailyExpRate = expSoFar / daysPassed;
-  const projectedExp = expSoFar + dailyExpRate * daysLeft;
-  const projectedBal = incSoFar - projectedExp;
+  const dailyExpRate    = expSoFar / daysPassed;
+  const projectedExp    = expSoFar + dailyExpRate * daysLeft;
+
+  // Available = income - savings - expenses  (savings excluded from spendable)
+  const projectedAvailable = incSoFar - savingsSoFar - projectedExp;
 
   return {
-    projectedExpense: projectedExp,
-    projectedBalance: projectedBal,
-    dailyRate: dailyExpRate,
+    projectedExpense:  projectedExp,
+    projectedBalance:  projectedAvailable,   // now means "available to spend"
+    savingsSoFar,
+    dailyRate:         dailyExpRate,
     daysLeft,
-    onTrack: projectedBal >= 0,
+    onTrack:           projectedAvailable >= 0,
   };
 }
 
@@ -95,7 +116,6 @@ export function detectUnusualSpending(transactions) {
 
   if (todayExp === 0) return null;
 
-  // Average daily expense over last 30 days (excluding today)
   const past30 = transactions.filter((t) => {
     if (t.type !== 'expense' || t.date === todayStr) return false;
     const diff = differenceInDays(now, parseISO(t.date));
