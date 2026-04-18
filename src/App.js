@@ -4,15 +4,18 @@ import { ToastProvider } from './components/ui/Toast';
 import { BottomNav } from './components/layout/BottomNav';
 import { AccountSetupModal } from './components/accounts/AccountSetupModal';
 import { useAccounts } from './hooks/useAccounts';
-import Dashboard       from './pages/Dashboard';
-import Transactions    from './pages/Transactions';
-import Accounts        from './pages/Accounts';
-import Budgets         from './pages/Budgets';
-import Reports         from './pages/Reports';
-import Settings        from './pages/Settings';
-import Bills           from './pages/Bills';
-import VacationPlanner from './pages/VacationPlanner';
-import AuthPage        from './pages/AuthPage';
+
+// Pages
+import Dashboard    from './pages/Dashboard';
+import Transactions from './pages/Transactions';
+import Planning     from './pages/Planning';
+import GoalsHub     from './pages/GoalsHub';
+import More         from './pages/More';
+import Accounts     from './pages/Accounts';
+import Reports      from './pages/Reports';
+import Settings     from './pages/Settings';
+import AuthPage     from './pages/AuthPage';
+
 import './styles/global.css';
 
 function AccountGuard({ children }) {
@@ -26,6 +29,7 @@ function AccountGuard({ children }) {
 
 function PrivateRoutes() {
   const { user, loading } = useAuth();
+
   if (loading) return (
     <div style={{ minHeight: '100dvh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#0f172a' }}>
       <div style={{ textAlign: 'center' }}>
@@ -34,21 +38,25 @@ function PrivateRoutes() {
       </div>
     </div>
   );
+
   if (!user) return <Navigate to="/auth" replace />;
 
   return (
     <AccountGuard>
       <>
         <Routes>
-          <Route path="/"             element={<Dashboard />}       />
-          <Route path="/transactions" element={<Transactions />}    />
-          <Route path="/accounts"     element={<Accounts />}        />
-          <Route path="/budgets"      element={<Budgets />}         />
-          <Route path="/reports"      element={<Reports />}         />
-          <Route path="/bills"        element={<Bills />}           />
-          <Route path="/vacation"     element={<VacationPlanner />} />
-          <Route path="/settings"     element={<Settings />}        />
-          <Route path="*"             element={<Navigate to="/" replace />} />
+          <Route path="/"             element={<Dashboard />}    />
+          <Route path="/transactions" element={<Transactions />} />
+          <Route path="/planning"     element={<Planning />}     />
+          <Route path="/goals"        element={<GoalsHub />}     />
+          <Route path="/more"         element={<More />}         />
+          <Route path="/accounts"     element={<Accounts />}     />
+          <Route path="/reports"      element={<Reports />}      />
+          <Route path="/settings"     element={<Settings />}     />
+          <Route path="/bills"        element={<Navigate to="/planning" replace />} />
+          <Route path="/budgets"      element={<Navigate to="/planning" replace />} />
+          <Route path="/vacation"     element={<Navigate to="/goals" replace />}    />
+          <Route path="*"             element={<Navigate to="/" replace />}         />
         </Routes>
         <BottomNav />
       </>
