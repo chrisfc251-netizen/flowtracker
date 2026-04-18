@@ -22,21 +22,20 @@ function estimatePace(goal) {
 }
 
 // ── Savings Goals sub-tab ─────────────────────────────────────────────────
-function SavingsTab() {
+function SavingsTab({ showForm, setShowForm }) {
   const { goals, loading, addGoal, addMoneyToGoal, subtractMoneyFromGoal, deleteGoal } = useSavingsGoals();
   const { push } = useToast();
 
-  const [showForm,         setShowForm]         = useState(false);
-  const [goalName,         setGoalName]         = useState('');
-  const [goalTarget,       setGoalTarget]       = useState('');
-  const [goalCurrent,      setGoalCurrent]      = useState('');
-  const [goalDate,         setGoalDate]         = useState('');
-  const [activeGoalId,     setActiveGoalId]     = useState(null);
-  const [goalAction,       setGoalAction]       = useState('add');
-  const [contribution,     setContribution]     = useState('');
-  const [savingId,         setSavingId]         = useState(null);
-  const [editDeadlineId,   setEditDeadlineId]   = useState(null);
-  const [newDeadline,      setNewDeadline]      = useState('');
+  const [goalName,       setGoalName]       = useState('');
+  const [goalTarget,     setGoalTarget]     = useState('');
+  const [goalCurrent,    setGoalCurrent]    = useState('');
+  const [goalDate,       setGoalDate]       = useState('');
+  const [activeGoalId,   setActiveGoalId]   = useState(null);
+  const [goalAction,     setGoalAction]     = useState('add');
+  const [contribution,   setContribution]   = useState('');
+  const [savingId,       setSavingId]       = useState(null);
+  const [editDeadlineId, setEditDeadlineId] = useState(null);
+  const [newDeadline,    setNewDeadline]    = useState('');
 
   async function handleAdd(e) {
     e.preventDefault();
@@ -74,16 +73,19 @@ function SavingsTab() {
     <div>
       {showForm && (
         <form onSubmit={handleAdd} className="card" style={{ marginBottom: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-          <input type="text"   placeholder="Goal name"           value={goalName}   onChange={(e) => setGoalName(e.target.value)} />
-          <input type="number" placeholder="Target ($)"          value={goalTarget} onChange={(e) => setGoalTarget(e.target.value)} />
-          <input type="number" placeholder="Already saved ($)"   value={goalCurrent} onChange={(e) => setGoalCurrent(e.target.value)} />
-          <input type="date"                                      value={goalDate}   onChange={(e) => setGoalDate(e.target.value)} />
-          <button type="submit" style={{ background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save Goal</button>
+          <input type="text"   placeholder="Goal name"         value={goalName}    onChange={(e) => setGoalName(e.target.value)} />
+          <input type="number" placeholder="Target ($)"        value={goalTarget}  onChange={(e) => setGoalTarget(e.target.value)} />
+          <input type="number" placeholder="Already saved ($)" value={goalCurrent} onChange={(e) => setGoalCurrent(e.target.value)} />
+          <input type="date"                                    value={goalDate}    onChange={(e) => setGoalDate(e.target.value)} />
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="submit" style={{ flex: 1, background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save Goal</button>
+            <button type="button" onClick={() => setShowForm(false)} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 8, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+          </div>
         </form>
       )}
 
-      {goals.length === 0 ? (
-        <EmptyState icon="🎯" title="No goals yet" subtitle="Start saving toward something meaningful" />
+      {goals.length === 0 && !showForm ? (
+        <EmptyState icon="🎯" title="No goals yet" subtitle="Tap + to start saving toward something" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {goals.map((goal) => {
@@ -165,23 +167,40 @@ function SavingsTab() {
 }
 
 // ── Vacations sub-tab ─────────────────────────────────────────────────────
-function VacationsTab() {
+function VacationsTab({ showForm, setShowForm }) {
   const { vacations, loading, addVacation, updateVacation, deleteVacation } = useVacations();
   const { goals } = useSavingsGoals();
   const { push }  = useToast();
 
-  const [showForm, setShowForm] = useState(false);
   const [editItem, setEditItem] = useState(null);
-  const [form, setForm]         = useState({ destination: '', trip_date: '', total_budget: '', flight_budget: '', hotel_budget: '', misc_budget: '', linked_goal_id: '' });
+  const [form, setForm] = useState({ destination: '', trip_date: '', total_budget: '', flight_budget: '', hotel_budget: '', misc_budget: '', linked_goal_id: '' });
 
   function setF(k, v) { setForm((f) => ({ ...f, [k]: v })); }
 
+  function openEdit(v) {
+    setEditItem(v);
+    setForm({ destination: v.destination, trip_date: v.trip_date, total_budget: String(v.total_budget), flight_budget: String(v.flight_budget || ''), hotel_budget: String(v.hotel_budget || ''), misc_budget: String(v.misc_budget || ''), linked_goal_id: v.linked_goal_id || '' });
+  }
+
+  function closeForm() {
+    setShowForm(false);
+    setEditItem(null);
+    setForm({ destination: '', trip_date: '', total_budget: '', flight_budget: '', hotel_budget: '', misc_budget: '', linked_goal_id: '' });
+  }
+
   async function handleSave() {
     if (!form.destination || !form.trip_date || !form.total_budget) return;
-    const payload = { destination: form.destination.trim(), trip_date: form.trip_date, total_budget: parseFloat(form.total_budget), flight_budget: parseFloat(form.flight_budget || 0), hotel_budget: parseFloat(form.hotel_budget || 0), misc_budget: parseFloat(form.misc_budget || 0), linked_goal_id: form.linked_goal_id || null };
-    if (editItem) { await updateVacation(editItem.id, payload); push('Trip updated ✓'); setEditItem(null); }
-    else          { await addVacation(payload); push('Trip planned ✓ ✈️'); setShowForm(false); }
-    setForm({ destination: '', trip_date: '', total_budget: '', flight_budget: '', hotel_budget: '', misc_budget: '', linked_goal_id: '' });
+    const payload = {
+      destination: form.destination.trim(), trip_date: form.trip_date,
+      total_budget: parseFloat(form.total_budget),
+      flight_budget: parseFloat(form.flight_budget || 0),
+      hotel_budget: parseFloat(form.hotel_budget || 0),
+      misc_budget: parseFloat(form.misc_budget || 0),
+      linked_goal_id: form.linked_goal_id || null
+    };
+    if (editItem) { await updateVacation(editItem.id, payload); push('Trip updated ✓'); }
+    else          { await addVacation(payload); push('Trip planned ✓ ✈️'); }
+    closeForm();
   }
 
   const S = { inp: { background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#f1f5f9', padding: '0.625rem 0.875rem', fontSize: '0.9rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' } };
@@ -190,11 +209,11 @@ function VacationsTab() {
     <div>
       {(showForm || editItem) && (
         <div className="card" style={{ marginBottom: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-          <input type="text"   placeholder="Destination (e.g. Tokyo)"  value={form.destination}   onChange={(e) => setF('destination', e.target.value)}   style={S.inp} />
-          <input type="date"                                            value={form.trip_date}     onChange={(e) => setF('trip_date', e.target.value)}     style={S.inp} />
-          <input type="number" placeholder="Total budget ($)"          value={form.total_budget}  onChange={(e) => setF('total_budget', e.target.value)}  style={{ ...S.inp, fontSize: '1.25rem', fontWeight: 800, color: '#818cf8' }} />
+          <input type="text"   placeholder="Destination (e.g. Tokyo)" value={form.destination}  onChange={(e) => setF('destination', e.target.value)}  style={S.inp} />
+          <input type="date"                                           value={form.trip_date}    onChange={(e) => setF('trip_date', e.target.value)}    style={S.inp} />
+          <input type="number" placeholder="Total budget ($)"         value={form.total_budget} onChange={(e) => setF('total_budget', e.target.value)} style={{ ...S.inp, fontSize: '1.25rem', fontWeight: 800, color: '#818cf8' }} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-            {[['flight_budget','✈️'],['hotel_budget','🏨'],['misc_budget','🎒']].map(([k,ic]) => (
+            {[['flight_budget','✈️'],['hotel_budget','🏨'],['misc_budget','🎒']].map(([k, ic]) => (
               <input key={k} type="number" placeholder={`${ic} $0`} value={form[k]} onChange={(e) => setF(k, e.target.value)} style={{ ...S.inp, fontSize: '0.85rem', padding: '0.5rem' }} />
             ))}
           </div>
@@ -206,13 +225,13 @@ function VacationsTab() {
             <button onClick={handleSave} style={{ flex: 1, background: '#818cf8', color: '#fff', border: 'none', borderRadius: 10, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
               {editItem ? 'Update Trip' : 'Create Trip'}
             </button>
-            <button onClick={() => { setShowForm(false); setEditItem(null); }} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 10, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={closeForm} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 10, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}
 
-      {vacations.length === 0 ? (
-        <EmptyState icon="✈️" title="No trips planned" subtitle="Add a destination and start saving toward it" />
+      {vacations.length === 0 && !showForm ? (
+        <EmptyState icon="✈️" title="No trips planned" subtitle="Tap + to plan your next adventure" />
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           {vacations.map((v) => {
@@ -230,8 +249,10 @@ function VacationsTab() {
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.375rem' }}>
-                    <button onClick={() => { setEditItem(v); setForm({ destination: v.destination, trip_date: v.trip_date, total_budget: String(v.total_budget), flight_budget: String(v.flight_budget || ''), hotel_budget: String(v.hotel_budget || ''), misc_budget: String(v.misc_budget || ''), linked_goal_id: v.linked_goal_id || '' }); }} style={{ background: 'rgba(129,140,248,.08)', color: '#818cf8', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}>✏️</button>
-                    <button onClick={async () => { if (!window.confirm(`Delete trip to "${v.destination}"?`)) return; await deleteVacation(v.id); push('Removed', 'warning'); }} style={{ background: 'rgba(244,63,94,.06)', color: '#f43f5e', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}><Trash2 size={13} /></button>
+                    <button onClick={() => openEdit(v)} style={{ background: 'rgba(129,140,248,.08)', color: '#818cf8', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}>✏️</button>
+                    <button onClick={async () => { if (!window.confirm(`Delete "${v.destination}"?`)) return; await deleteVacation(v.id); push('Removed', 'warning'); }} style={{ background: 'rgba(244,63,94,.06)', color: '#f43f5e', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}>
+                      <Trash2 size={13} />
+                    </button>
                   </div>
                 </div>
                 <div style={{ background: '#0f172a', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: '0.375rem' }}>
@@ -242,10 +263,10 @@ function VacationsTab() {
                   <span style={{ color }}>{pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.375rem' }}>
-                  {[['Per Day', pace.perDay], ['Per Week', pace.perWeek], ['Per Month', pace.perMonth]].map(([l, v2]) => (
+                  {[['Per Day', pace.perDay], ['Per Week', pace.perWeek], ['Per Month', pace.perMonth]].map(([l, val]) => (
                     <div key={l} style={{ background: '#0f172a', borderRadius: 8, padding: '0.4rem', textAlign: 'center' }}>
                       <p style={{ fontSize: '0.62rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.15rem' }}>{l}</p>
-                      <p style={{ fontWeight: 700, color: '#818cf8', fontSize: '0.82rem' }}>{fmt(v2)}</p>
+                      <p style={{ fontWeight: 700, color: '#818cf8', fontSize: '0.82rem' }}>{fmt(val)}</p>
                     </div>
                   ))}
                 </div>
@@ -262,16 +283,21 @@ function VacationsTab() {
 const TABS = ['Savings', 'Vacations'];
 
 export default function GoalsHub() {
-  const [active, setActive] = useState('Savings');
-  const [showAddGoal,     setShowAddGoal]     = useState(false);
-  const [showAddVacation, setShowAddVacation] = useState(false);
+  const [active,   setActive]   = useState('Savings');
+  const [showForm, setShowForm] = useState(false);
+
+  // Reset form when switching tabs
+  function handleTabChange(t) {
+    setActive(t);
+    setShowForm(false);
+  }
 
   return (
     <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1>Goals</h1>
-        <button onClick={() => active === 'Savings' ? setShowAddGoal((p) => !p) : setShowAddVacation((p) => !p)} style={{
-          background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
+        <button onClick={() => setShowForm((p) => !p)} style={{
+          background: showForm ? '#334155' : '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
           width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
         }}>
           <Plus size={20} strokeWidth={2.5} />
@@ -280,17 +306,19 @@ export default function GoalsHub() {
 
       <div style={{ display: 'flex', background: '#1e293b', borderRadius: 10, padding: 3, marginBottom: '1.25rem' }}>
         {TABS.map((t) => (
-          <button key={t} onClick={() => setActive(t)} style={{
+          <button key={t} onClick={() => handleTabChange(t)} style={{
             flex: 1, padding: '0.55rem', borderRadius: 8, border: 'none', cursor: 'pointer',
             background: active === t ? '#334155' : 'transparent',
             color: active === t ? '#f1f5f9' : '#64748b',
             fontWeight: 600, fontSize: '0.82rem', fontFamily: 'inherit'
-          }}>{t === 'Savings' ? '🎯 Savings' : '✈️ Vacations'}</button>
+          }}>
+            {t === 'Savings' ? '🎯 Savings' : '✈️ Vacations'}
+          </button>
         ))}
       </div>
 
-      {active === 'Savings'   && <SavingsTab   externalShowForm={showAddGoal}     onFormClose={() => setShowAddGoal(false)} />}
-      {active === 'Vacations' && <VacationsTab externalShowForm={showAddVacation} onFormClose={() => setShowAddVacation(false)} />}
+      {active === 'Savings'   && <SavingsTab   showForm={showForm} setShowForm={setShowForm} />}
+      {active === 'Vacations' && <VacationsTab showForm={showForm} setShowForm={setShowForm} />}
     </div>
   );
 }

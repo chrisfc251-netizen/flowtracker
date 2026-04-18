@@ -190,12 +190,11 @@ function BudgetsTab() {
 }
 
 // ── Bills sub-tab ─────────────────────────────────────────────────────────
-function BillsTab() {
+function BillsTab({ showForm, setShowForm }) {
   const { expenses, addExpense, updateExpense, deleteExpense, markAsPaid } = useFixedExpenses();
   const { accounts } = useAccounts();
   const { push }     = useToast();
 
-  const [showForm,   setShowForm]   = useState(false);
   const [editItem,   setEditItem]   = useState(null);
   const [payingItem, setPayingItem] = useState(null);
   const [payAcctId,  setPayAcctId]  = useState('');
@@ -399,7 +398,7 @@ export default function Planning() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1>Planning</h1>
         {active === 'Bills' && (
-          <button onClick={() => setShowBillForm(true)} style={{ background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <button onClick={() => setShowBillForm((p) => !p)} style={{ background: showBillForm ? '#334155' : '#818cf8', color: '#fff', border: 'none', borderRadius: 12, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <Plus size={20} strokeWidth={2.5} />
           </button>
         )}
@@ -426,7 +425,7 @@ export default function Planning() {
       </div>
 
       {active === 'Budgets'  && <BudgetsTab />}
-      {active === 'Bills'    && <BillsTab   showExternalForm={showBillForm} onFormClose={() => setShowBillForm(false)} />}
+      {active === 'Bills'    && <BillsTab   showForm={showBillForm} setShowForm={setShowBillForm} />}
       {active === 'Insights' && <InsightsTab />}
     </div>
   );
