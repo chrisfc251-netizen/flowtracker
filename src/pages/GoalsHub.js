@@ -1,433 +1,296 @@
 import { useState } from 'react';
-import { getMonth, getYear } from 'date-fns';
-import { Plus, Pencil, Trash2 } from 'lucide-react';
-import { differenceInDays, parseISO, format } from 'date-fns';
-
-// Hooks
-import { useBudgets } from '../hooks/useBudgets';
-import { useTransactions } from '../hooks/useTransactions';
-import { useFixedExpenses } from '../hooks/useFixedExpenses';
+import { Plus, Trash2 } from 'lucide-react';
+import { differenceInDays, format, parseISO } from 'date-fns';
 import { useSavingsGoals } from '../hooks/useSavingsGoals';
-import { useCategoryPriorities } from '../hooks/useCategoryPriorities';
-import { useAccounts } from '../hooks/useAccounts';
+import { useVacations, calcVacationPace } from '../hooks/useVacations';
 import { useToast } from '../components/ui/Toast';
-
-// Components
-import { SmartBudgetPanel } from '../components/budgets/SmartBudgetPanel';
-import { FixedExpenseForm } from '../components/bills/FixedExpenseForm';
 import { EmptyState } from '../components/ui/EmptyState';
-
-// Lib
-import { formatUSD, getCategoryMeta, EXPENSE_CATEGORIES } from '../lib/constants';
-import { filterByMonth } from '../lib/finance';
-import { computeBalanceSplit, rebalanceBudget } from '../lib/balanceEngine';
-import { buildEffectiveBudgetStatus } from '../lib/budgetEngine';
-import { generateInsights, evaluateDecisions } from '../lib/balanceEngine';
 
 function fmt(n) { return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n || 0); }
 
-// ── Budgets sub-tab ───────────────────────────────────────────────────────
-function BudgetsTab() {
-  const { priorities, getPriorityMap } = useCategoryPriorities();
-  const priorityMap = getPriorityMap();
-  const { budgets, effectiveBudgets, upsertBudget, deleteBudget, toggleActive } = useBudgets(priorityMap);
-  const { transactions } = useTransactions();
-  const { goals }        = useSavingsGoals();
-  const { push }         = useToast();
+function estimatePace(goal) {
+  const current   = Number(goal.current_amount || 0);
+  const target    = Number(goal.target_amount  || 0);
+  const remaining = target - current;
+  if (remaining <= 0) return null;
+  const created   = goal.created_at ? new Date(goal.created_at) : new Date();
+  const daysSince = Math.max(differenceInDays(new Date(), created), 1);
+  const avgPerDay = current / daysSince;
+  if (avgPerDay <= 0) return { hasData: false };
+  const daysLeft = Math.ceil(remaining / avgPerDay);
+  return { hasData: true, daysLeft, avgPerDay, label: daysLeft > 365 ? `~${Math.round(daysLeft/365)}yr` : daysLeft > 30 ? `~${Math.round(daysLeft/30)}mo` : `${daysLeft}d` };
+}
 
-  const now     = new Date();
-  const monthly = filterByMonth(transactions, getYear(now), getMonth(now));
-  const { availableBalance } = computeBalanceSplit(transactions);
+// ── Savings Goals sub-tab ─────────────────────────────────────────────────
+function SavingsTab() {
+  const { goals, loading, addGoal, addMoneyToGoal, subtractMoneyFromGoal, deleteGoal } = useSavingsGoals();
+  const { push } = useToast();
 
-  const statusList = buildEffectiveBudgetStatus(monthly, effectiveBudgets.length ? effectiveBudgets : budgets.map((b) => ({ ...b, effectiveBudget: b.amount_limit })));
+  const [showForm,         setShowForm]         = useState(false);
+  const [goalName,         setGoalName]         = useState('');
+  const [goalTarget,       setGoalTarget]       = useState('');
+  const [goalCurrent,      setGoalCurrent]      = useState('');
+  const [goalDate,         setGoalDate]         = useState('');
+  const [activeGoalId,     setActiveGoalId]     = useState(null);
+  const [goalAction,       setGoalAction]       = useState('add');
+  const [contribution,     setContribution]     = useState('');
+  const [savingId,         setSavingId]         = useState(null);
+  const [editDeadlineId,   setEditDeadlineId]   = useState(null);
+  const [newDeadline,      setNewDeadline]      = useState('');
 
-  const existingExpenses = {};
-  for (const t of monthly.filter((x) => x.type === 'expense')) {
-    existingExpenses[t.category] = (existingExpenses[t.category] || 0) + Number(t.amount);
+  async function handleAdd(e) {
+    e.preventDefault();
+    if (!goalName.trim() || !goalTarget) return;
+    const { error } = await addGoal({ name: goalName.trim(), target_amount: goalTarget, current_amount: goalCurrent || 0, target_date: goalDate || null });
+    if (error) { push(error.message, 'error'); return; }
+    push('Goal added ✓');
+    setGoalName(''); setGoalTarget(''); setGoalCurrent(''); setGoalDate('');
+    setShowForm(false);
   }
 
-  const naCount = budgets.filter((b) => b.is_active === false).length;
-  const naPool  = budgets.filter((b) => b.is_active === false).reduce((s, b) => s + Number(b.amount_limit), 0);
-
-  const [editCat,    setEditCat]    = useState(null);
-  const [limitInput, setLimitInput] = useState('');
-  const [showAdd,    setShowAdd]    = useState(false);
-  const [newCat,     setNewCat]     = useState('food');
-  const [newLimit,   setNewLimit]   = useState('');
-  const [applying,   setApplying]   = useState(false);
-
-  async function handleUpsert(cat, lim) {
-    const val = parseFloat(lim);
-    if (!val || val <= 0) { push('Enter a valid amount', 'error'); return; }
-    await upsertBudget(cat, val);
-    push('Budget saved');
-    setEditCat(null); setShowAdd(false); setNewLimit('');
+  async function handleContribution(goalId) {
+    if (!contribution || Number(contribution) <= 0) return;
+    setSavingId(goalId);
+    const fn = goalAction === 'add' ? addMoneyToGoal : subtractMoneyFromGoal;
+    const { error } = await fn(goalId, contribution);
+    setSavingId(null);
+    if (error) { push(error.message, 'error'); return; }
+    push(goalAction === 'add' ? 'Added ✓' : 'Corrected ✓');
+    setContribution(''); setActiveGoalId(null);
   }
 
-  async function handleDelete(cat) {
-    if (!window.confirm('Remove this budget?')) return;
-    await deleteBudget(cat);
-    push('Removed', 'warning');
+  async function handleUpdateDeadline(goalId) {
+    if (!newDeadline) return;
+    const { supabase } = await import('../lib/supabase');
+    await supabase.from('savings_goals').update({ target_date: newDeadline }).eq('id', goalId);
+    push('Deadline updated ✓');
+    setEditDeadlineId(null); setNewDeadline('');
+    window.location.reload();
   }
 
-  async function handleToggle(cat) {
-    const b = budgets.find((b) => b.category === cat);
-    const wasActive = b?.is_active !== false;
-    await toggleActive(cat);
-    push(wasActive ? `${cat} marked N/A — budget redistributed` : `${cat} reactivated ✓`);
-  }
-
-  async function handleRebalance() {
-    setApplying(true);
-    const limits = {};
-    for (const b of budgets) limits[b.category] = b.amount_limit;
-    const result = rebalanceBudget({ limits, actuals: existingExpenses, priorities: priorityMap });
-    let count = 0;
-    for (const [cat, newLim] of Object.entries(result.result)) {
-      if (newLim !== limits[cat] && newLim > 0) { await upsertBudget(cat, newLim); count++; }
-    }
-    setApplying(false);
-    push(count > 0 ? `⚖️ ${count} budget${count > 1 ? 's' : ''} adjusted ✓` : 'Already balanced', count > 0 ? 'success' : 'warning');
-  }
+  if (loading) return <p style={{ color: '#475569', padding: '2rem', textAlign: 'center' }}>Loading…</p>;
 
   return (
     <div>
-      {naCount > 0 && (
-        <div style={{ background: 'rgba(129,140,248,.08)', border: '1px solid rgba(129,140,248,.2)', borderRadius: 12, padding: '0.75rem 1rem', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-          <span>♻️</span>
-          <p style={{ fontSize: '0.8rem', color: '#818cf8', fontWeight: 600 }}>
-            {naCount} inactive · {fmt(naPool)} redistributed to high-priority categories
-          </p>
-        </div>
+      {showForm && (
+        <form onSubmit={handleAdd} className="card" style={{ marginBottom: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+          <input type="text"   placeholder="Goal name"           value={goalName}   onChange={(e) => setGoalName(e.target.value)} />
+          <input type="number" placeholder="Target ($)"          value={goalTarget} onChange={(e) => setGoalTarget(e.target.value)} />
+          <input type="number" placeholder="Already saved ($)"   value={goalCurrent} onChange={(e) => setGoalCurrent(e.target.value)} />
+          <input type="date"                                      value={goalDate}   onChange={(e) => setGoalDate(e.target.value)} />
+          <button type="submit" style={{ background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save Goal</button>
+        </form>
       )}
 
-      <div className="card" style={{ marginBottom: '0.875rem' }}>
-        <SmartBudgetPanel availableBalance={availableBalance} goals={goals} categoryPriorities={priorities} existingExpenses={existingExpenses}
-          onApplyBudget={async (limits) => { for (const [c, l] of Object.entries(limits)) if (l > 0) await upsertBudget(c, l); push('Smart budgets applied ✓'); }} />
-      </div>
+      {goals.length === 0 ? (
+        <EmptyState icon="🎯" title="No goals yet" subtitle="Start saving toward something meaningful" />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {goals.map((goal) => {
+            const current    = Number(goal.current_amount || 0);
+            const target     = Number(goal.target_amount  || 0);
+            const percentage = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+            const completed  = percentage >= 100;
+            const color      = completed ? '#22c55e' : percentage > 75 ? '#f59e0b' : '#818cf8';
+            const pace       = estimatePace(goal);
 
-      <button onClick={handleRebalance} disabled={applying} style={{
-        background: 'rgba(245,158,11,.1)', border: '1px solid rgba(245,158,11,.2)', borderRadius: 10,
-        padding: '0.625rem', color: '#f59e0b', fontWeight: 700, fontSize: '0.82rem',
-        cursor: 'pointer', width: '100%', marginBottom: '0.875rem', fontFamily: 'inherit', opacity: applying ? 0.6 : 1
-      }}>
-        {applying ? '⏳ Applying…' : '⚖️ Auto-Rebalance Based on Priorities'}
-      </button>
-
-      {showAdd && (
-        <div className="card" style={{ marginBottom: '0.875rem' }}>
-          <select value={newCat} onChange={(e) => setNewCat(e.target.value)} style={{ marginBottom: '0.625rem' }}>
-            {EXPENSE_CATEGORIES.map((c) => <option key={c.value} value={c.value}>{c.icon} {c.label}</option>)}
-          </select>
-          <input type="number" inputMode="decimal" placeholder="Monthly limit ($)" value={newLimit} onChange={(e) => setNewLimit(e.target.value)} style={{ marginBottom: '0.625rem' }} />
-          <div style={{ display: 'flex', gap: '0.5rem' }}>
-            <button className="btn-primary" onClick={() => handleUpsert(newCat, newLimit)}>Save</button>
-            <button className="btn-ghost" onClick={() => { setShowAdd(false); setNewLimit(''); }}>Cancel</button>
-          </div>
-        </div>
-      )}
-
-      {/* Inactive */}
-      {budgets.filter((b) => b.is_active === false).length > 0 && (
-        <div style={{ marginBottom: '0.875rem' }}>
-          <p style={{ fontSize: '0.68rem', color: '#475569', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.375rem' }}>Inactive (N/A)</p>
-          {budgets.filter((b) => b.is_active === false).map((b) => {
-            const meta = getCategoryMeta(b.category);
             return (
-              <div key={b.category} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '0.625rem 0.875rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.375rem', opacity: 0.6 }}>
-                <span style={{ fontSize: '0.85rem', color: '#94a3b8' }}>{meta.icon} {meta.label} · {fmt(b.amount_limit)}</span>
-                <button onClick={() => handleToggle(b.category)} style={{ background: 'rgba(34,197,94,.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,.2)', borderRadius: 6, padding: '0.25rem 0.625rem', fontSize: '0.72rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>Reactivate</button>
+              <div key={goal.id} className="card" style={{ borderColor: completed ? 'rgba(34,197,94,.3)' : undefined }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+                  <div>
+                    <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{goal.name}</strong>
+                    {completed && <span style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: '#22c55e', fontWeight: 700 }}>✓ Done!</span>}
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>{fmt(current)} / {fmt(target)}</span>
+                    <button onClick={async () => { if (!window.confirm(`Delete "${goal.name}"?`)) return; await deleteGoal(goal.id); push('Deleted', 'warning'); }} style={{ background: 'rgba(244,63,94,.1)', border: 'none', borderRadius: 6, padding: '3px 6px', cursor: 'pointer', color: '#f43f5e', display: 'flex' }}>
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                </div>
+
+                <div style={{ background: '#0f172a', borderRadius: 999, height: 8, overflow: 'hidden' }}>
+                  <div style={{ width: `${percentage}%`, height: '100%', background: color, borderRadius: 999, transition: 'width .4s' }} />
+                </div>
+
+                <div style={{ marginTop: '0.375rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b' }}>
+                  <span>{percentage.toFixed(0)}% · {fmt(Math.max(target - current, 0))} left</span>
+                  <span onClick={() => { setEditDeadlineId(goal.id); setNewDeadline(goal.target_date || ''); }} style={{ cursor: 'pointer', borderBottom: '1px dashed #334155' }}>
+                    {editDeadlineId === goal.id ? (
+                      <span style={{ display: 'flex', gap: '0.375rem' }} onClick={(e) => e.stopPropagation()}>
+                        <input type="date" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)} style={{ fontSize: '0.72rem', padding: '1px 5px', background: '#0f172a', border: '1px solid #334155', borderRadius: 5, color: '#f1f5f9', fontFamily: 'inherit' }} />
+                        <button onClick={() => handleUpdateDeadline(goal.id)} style={{ fontSize: '0.68rem', background: '#22c55e', border: 'none', borderRadius: 4, padding: '1px 7px', color: '#fff', cursor: 'pointer' }}>✓</button>
+                        <button onClick={() => setEditDeadlineId(null)} style={{ fontSize: '0.68rem', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>✕</button>
+                      </span>
+                    ) : goal.target_date ? 'By ' + goal.target_date : 'Set deadline ✏️'}
+                  </span>
+                </div>
+
+                {!completed && pace && (
+                  <div style={{ marginTop: '0.5rem', background: 'rgba(129,140,248,.07)', border: '1px solid rgba(129,140,248,.12)', borderRadius: 8, padding: '0.4rem 0.75rem', fontSize: '0.78rem' }}>
+                    {!pace.hasData ? <span style={{ color: '#475569' }}>Add money to get pace estimate</span>
+                      : <span style={{ color: '#818cf8' }}>🕐 ${pace.avgPerDay.toFixed(2)}/day → <strong>{pace.label}</strong> to goal</span>}
+                  </div>
+                )}
+
+                {!completed && (
+                  <div style={{ marginTop: '0.625rem' }}>
+                    {activeGoalId === goal.id ? (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                        <div style={{ display: 'flex', background: '#0f172a', borderRadius: 8, padding: 3, gap: 3 }}>
+                          {[{ val: 'add', label: '+ Add', color: '#22c55e' }, { val: 'subtract', label: '− Correct', color: '#f43f5e' }].map((opt) => (
+                            <button key={opt.val} onClick={() => setGoalAction(opt.val)} style={{ flex: 1, padding: '0.35rem', borderRadius: 6, border: 'none', cursor: 'pointer', background: goalAction === opt.val ? (opt.val === 'add' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)') : 'transparent', color: goalAction === opt.val ? opt.color : '#475569', fontWeight: 700, fontSize: '0.78rem', fontFamily: 'inherit' }}>{opt.label}</button>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <input type="number" inputMode="decimal" placeholder="Amount" value={contribution} onChange={(e) => setContribution(e.target.value)} style={{ flex: 1 }} autoFocus />
+                          <button onClick={() => handleContribution(goal.id)} disabled={savingId === goal.id} style={{ background: goalAction === 'add' ? '#22c55e' : '#f43f5e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 0.875rem', fontWeight: 700, cursor: 'pointer', opacity: savingId === goal.id ? 0.6 : 1 }}>
+                            {savingId === goal.id ? '…' : goalAction === 'add' ? 'Add' : 'Remove'}
+                          </button>
+                          <button onClick={() => { setActiveGoalId(null); setContribution(''); }} style={{ background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.75rem', cursor: 'pointer' }}>✕</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button onClick={() => { setActiveGoalId(goal.id); setGoalAction('add'); }} style={{ background: 'rgba(129,140,248,.12)', color: '#818cf8', border: '1px solid rgba(129,140,248,.25)', borderRadius: 8, padding: '0.5rem', fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer', width: '100%' }}>+ Add / Adjust Money</button>
+                    )}
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
       )}
-
-      {/* Active budgets */}
-      {statusList.length === 0
-        ? <EmptyState icon="🎯" title="No budgets" subtitle="Add limits or use Smart Budget" />
-        : statusList.map((b) => {
-          const meta = getCategoryMeta(b.category);
-          const pct  = Math.min(Math.round((b.spent / b.effectiveBudget) * 100), 100);
-          return (
-            <div key={b.category} className="card" style={{ marginBottom: '0.625rem', borderColor: b.over ? 'rgba(244,63,94,.35)' : undefined }}>
-              {b.over && <div style={{ background: 'rgba(244,63,94,.1)', border: '1px solid rgba(244,63,94,.25)', borderRadius: 8, padding: '0.375rem 0.75rem', marginBottom: '0.625rem', fontSize: '0.78rem', color: '#f43f5e', fontWeight: 600 }}>⚠️ Over by {fmt(b.spent - b.effectiveBudget)}</div>}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <span style={{ fontSize: '1.2rem' }}>{meta.icon}</span>
-                  <div>
-                    <p style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>{meta.label}</p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                      <p style={{ fontSize: '0.75rem', color: '#64748b' }}>{fmt(b.spent)} / {fmt(b.effectiveBudget)}</p>
-                      {b.redistributed && b.delta > 0 && <span style={{ fontSize: '0.65rem', color: '#818cf8', fontWeight: 700, background: 'rgba(129,140,248,.1)', borderRadius: 4, padding: '1px 5px' }}>+{fmt(b.delta)}</span>}
-                    </div>
-                  </div>
-                </div>
-                <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                  <button onClick={() => handleToggle(b.category)} style={{ background: 'rgba(100,116,139,.08)', color: '#64748b', border: '1px solid #334155', borderRadius: 6, padding: '0.2rem 0.5rem', fontSize: '0.68rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>N/A</button>
-                  {editCat !== b.category && <>
-                    <button className="btn-icon" onClick={() => { setEditCat(b.category); setLimitInput(String(b.amount_limit)); }}><Pencil size={13} /></button>
-                    <button className="btn-icon" onClick={() => handleDelete(b.category)} style={{ color: '#64748b' }}><Trash2 size={13} /></button>
-                  </>}
-                </div>
-              </div>
-              <div style={{ background: '#0f172a', borderRadius: 4, height: 5, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: b.over ? '#f43f5e' : pct > 80 ? '#f59e0b' : '#22c55e' }} />
-              </div>
-              <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.25rem', textAlign: 'right' }}>{pct}% used</p>
-              {editCat === b.category && (
-                <div style={{ marginTop: '0.625rem', display: 'flex', gap: '0.5rem' }}>
-                  <input type="number" value={limitInput} onChange={(e) => setLimitInput(e.target.value)} placeholder="New limit" style={{ flex: 1 }} />
-                  <button className="btn-primary" style={{ width: 'auto', padding: '0 0.875rem' }} onClick={() => handleUpsert(b.category, limitInput)}>Save</button>
-                  <button className="btn-ghost" style={{ width: 'auto', padding: '0 0.75rem' }} onClick={() => setEditCat(null)}>✕</button>
-                </div>
-              )}
-            </div>
-          );
-        })}
     </div>
   );
 }
 
-// ── Bills sub-tab ─────────────────────────────────────────────────────────
-function BillsTab() {
-  const { expenses, addExpense, updateExpense, deleteExpense, markAsPaid } = useFixedExpenses();
-  const { accounts } = useAccounts();
-  const { push }     = useToast();
+// ── Vacations sub-tab ─────────────────────────────────────────────────────
+function VacationsTab() {
+  const { vacations, loading, addVacation, updateVacation, deleteVacation } = useVacations();
+  const { goals } = useSavingsGoals();
+  const { push }  = useToast();
 
-  const [showForm,   setShowForm]   = useState(false);
-  const [editItem,   setEditItem]   = useState(null);
-  const [payingItem, setPayingItem] = useState(null);
-  const [payAcctId,  setPayAcctId]  = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editItem, setEditItem] = useState(null);
+  const [form, setForm]         = useState({ destination: '', trip_date: '', total_budget: '', flight_budget: '', hotel_budget: '', misc_budget: '', linked_goal_id: '' });
 
-  const totalMonthly = expenses.reduce((s, e) => {
-    if (e.frequency_type === 'monthly') return s + Number(e.amount);
-    if (e.frequency_type === 'weekly')  return s + Number(e.amount) * 4.33;
-    return s + (Number(e.amount) * 30) / (e.frequency_value || 30);
-  }, 0);
+  function setF(k, v) { setForm((f) => ({ ...f, [k]: v })); }
 
-  const dueSoon = expenses.filter((e) => {
-    const d = differenceInDays(parseISO(e.next_due_date), new Date());
-    return d >= 0 && d <= 7;
-  });
-  const upcoming = expenses.filter((e) => {
-    const d = differenceInDays(parseISO(e.next_due_date), new Date());
-    return d > 7;
-  });
-
-  async function handleSave(payload) {
-    if (editItem) { await updateExpense(editItem.id, payload); push('Updated ✓'); setEditItem(null); }
-    else          { await addExpense(payload); push('Bill added ✓'); setShowForm(false); }
+  async function handleSave() {
+    if (!form.destination || !form.trip_date || !form.total_budget) return;
+    const payload = { destination: form.destination.trim(), trip_date: form.trip_date, total_budget: parseFloat(form.total_budget), flight_budget: parseFloat(form.flight_budget || 0), hotel_budget: parseFloat(form.hotel_budget || 0), misc_budget: parseFloat(form.misc_budget || 0), linked_goal_id: form.linked_goal_id || null };
+    if (editItem) { await updateVacation(editItem.id, payload); push('Trip updated ✓'); setEditItem(null); }
+    else          { await addVacation(payload); push('Trip planned ✓ ✈️'); setShowForm(false); }
+    setForm({ destination: '', trip_date: '', total_budget: '', flight_budget: '', hotel_budget: '', misc_budget: '', linked_goal_id: '' });
   }
 
-  async function handlePay() {
-    if (!payAcctId || !payingItem) return;
-    const { error } = await markAsPaid(payingItem, payAcctId);
-    if (error) { push(error.message, 'error'); return; }
-    push(`${payingItem.name} paid ✓`);
-    setPayingItem(null); setPayAcctId('');
-  }
-
-  function BillRow({ e }) {
-    const days  = differenceInDays(parseISO(e.next_due_date), new Date());
-    const color = days === 0 ? '#f43f5e' : days <= 3 ? '#f43f5e' : days <= 7 ? '#f59e0b' : '#64748b';
-    const label = days === 0 ? 'Today' : days < 0 ? 'Overdue' : `In ${days}d`;
-    const meta  = getCategoryMeta(e.category);
-    return (
-      <div style={{ background: '#1e293b', border: `1px solid ${days <= 3 ? 'rgba(244,63,94,.25)' : '#334155'}`, borderRadius: 12, padding: '0.875rem', marginBottom: '0.5rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <div style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(244,63,94,.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.1rem', flexShrink: 0 }}>{meta.icon}</div>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <p style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.9rem' }}>{e.name}</p>
-              <p style={{ fontWeight: 800, color: '#f43f5e', fontSize: '0.9rem' }}>{fmt(e.amount)}</p>
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.25rem' }}>
-              <span style={{ fontSize: '0.7rem', color, fontWeight: 700, background: `${color}18`, borderRadius: 5, padding: '1px 6px' }}>{label}</span>
-              <span style={{ fontSize: '0.7rem', color: '#475569' }}>{format(parseISO(e.next_due_date), 'MMM d, yyyy')}</span>
-            </div>
-          </div>
-        </div>
-        <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.625rem', paddingTop: '0.625rem', borderTop: '1px solid #334155' }}>
-          <button onClick={() => { setPayingItem(e); setPayAcctId(accounts[0]?.id || ''); }} style={{ flex: 2, background: 'rgba(34,197,94,.1)', color: '#22c55e', border: '1px solid rgba(34,197,94,.2)', borderRadius: 8, padding: '0.4rem', fontWeight: 700, fontSize: '0.78rem', cursor: 'pointer', fontFamily: 'inherit' }}>✓ Mark Paid</button>
-          <button onClick={() => setEditItem(e)} style={{ flex: 1, background: 'rgba(129,140,248,.08)', color: '#818cf8', border: '1px solid rgba(129,140,248,.15)', borderRadius: 8, padding: '0.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Pencil size={13} /></button>
-          <button onClick={async () => { if (!window.confirm(`Delete "${e.name}"?`)) return; await deleteExpense(e.id); push('Removed', 'warning'); }} style={{ flex: 1, background: 'rgba(244,63,94,.06)', color: '#f43f5e', border: '1px solid rgba(244,63,94,.12)', borderRadius: 8, padding: '0.4rem', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Trash2 size={13} /></button>
-        </div>
-      </div>
-    );
-  }
+  const S = { inp: { background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#f1f5f9', padding: '0.625rem 0.875rem', fontSize: '0.9rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' } };
 
   return (
     <div>
-      <div style={{ background: 'rgba(244,63,94,.07)', border: '1px solid rgba(244,63,94,.15)', borderRadius: 12, padding: '0.875rem 1rem', marginBottom: '1rem' }}>
-        <p style={{ fontSize: '0.68rem', color: '#f43f5e', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Monthly Committed</p>
-        <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f1f5f9' }}>{fmt(totalMonthly)}</p>
-        <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.1rem' }}>{expenses.length} active bill{expenses.length !== 1 ? 's' : ''}</p>
-      </div>
-
-      {dueSoon.length > 0 && (
-        <div style={{ marginBottom: '0.875rem' }}>
-          <p style={{ fontSize: '0.68rem', color: '#f43f5e', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.375rem' }}>Due Soon</p>
-          {dueSoon.map((e) => <BillRow key={e.id} e={e} />)}
-        </div>
-      )}
-
-      {upcoming.length > 0 && (
-        <div style={{ marginBottom: '0.875rem' }}>
-          <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.375rem' }}>Upcoming</p>
-          {upcoming.map((e) => <BillRow key={e.id} e={e} />)}
-        </div>
-      )}
-
-      {expenses.length === 0 && <EmptyState icon="📋" title="No bills yet" subtitle="Add your recurring expenses" />}
-
-      {/* Pay modal */}
-      {payingItem && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 510, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem' }} onClick={(e) => e.target === e.currentTarget && setPayingItem(null)}>
-          <div style={{ background: '#1e293b', borderRadius: 16, border: '1px solid #334155', width: '100%', maxWidth: 360, padding: '1.5rem' }}>
-            <h3 style={{ color: '#f1f5f9', marginBottom: '0.5rem' }}>Mark as Paid</h3>
-            <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1rem' }}>Creates a <strong style={{ color: '#f43f5e' }}>{fmt(payingItem.amount)}</strong> expense and advances the due date.</p>
-            <p style={{ fontSize: '0.78rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.5rem' }}>Pay from:</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem', marginBottom: '1rem' }}>
-              {accounts.map((a) => (
-                <button key={a.id} onClick={() => setPayAcctId(a.id)} style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', padding: '0.625rem', borderRadius: 10, border: `1px solid ${payAcctId === a.id ? a.color : '#334155'}`, background: payAcctId === a.id ? `${a.color}15` : '#0f172a', cursor: 'pointer', fontFamily: 'inherit' }}>
-                  <span>{a.icon}</span><span style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.875rem' }}>{a.name}</span>
-                  {payAcctId === a.id && <span style={{ marginLeft: 'auto', color: a.color, fontWeight: 700, fontSize: '0.8rem' }}>✓</span>}
-                </button>
-              ))}
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button onClick={handlePay} disabled={!payAcctId} style={{ flex: 1, background: '#22c55e', color: '#fff', border: 'none', borderRadius: 10, padding: '0.75rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit', opacity: !payAcctId ? 0.5 : 1 }}>Confirm</button>
-              <button onClick={() => setPayingItem(null)} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 10, padding: '0.75rem', cursor: 'pointer', fontFamily: 'inherit' }}>Cancel</button>
-            </div>
+      {(showForm || editItem) && (
+        <div className="card" style={{ marginBottom: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <input type="text"   placeholder="Destination (e.g. Tokyo)"  value={form.destination}   onChange={(e) => setF('destination', e.target.value)}   style={S.inp} />
+          <input type="date"                                            value={form.trip_date}     onChange={(e) => setF('trip_date', e.target.value)}     style={S.inp} />
+          <input type="number" placeholder="Total budget ($)"          value={form.total_budget}  onChange={(e) => setF('total_budget', e.target.value)}  style={{ ...S.inp, fontSize: '1.25rem', fontWeight: 800, color: '#818cf8' }} />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+            {[['flight_budget','✈️'],['hotel_budget','🏨'],['misc_budget','🎒']].map(([k,ic]) => (
+              <input key={k} type="number" placeholder={`${ic} $0`} value={form[k]} onChange={(e) => setF(k, e.target.value)} style={{ ...S.inp, fontSize: '0.85rem', padding: '0.5rem' }} />
+            ))}
+          </div>
+          <select value={form.linked_goal_id} onChange={(e) => setF('linked_goal_id', e.target.value)} style={S.inp}>
+            <option value="">— No linked goal —</option>
+            {goals.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
+          </select>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button onClick={handleSave} style={{ flex: 1, background: '#818cf8', color: '#fff', border: 'none', borderRadius: 10, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
+              {editItem ? 'Update Trip' : 'Create Trip'}
+            </button>
+            <button onClick={() => { setShowForm(false); setEditItem(null); }} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 10, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}
 
-      {(showForm || editItem) && <FixedExpenseForm initial={editItem} onSave={handleSave} onClose={() => { setShowForm(false); setEditItem(null); }} />}
-    </div>
-  );
-}
-
-// ── Insights sub-tab ──────────────────────────────────────────────────────
-function InsightsTab() {
-  const { transactions } = useTransactions();
-  const { goals }        = useSavingsGoals();
-  const { getPriorityMap } = useCategoryPriorities();
-  const { budgets, effectiveBudgets } = useBudgets(getPriorityMap());
-
-  const monthly = filterByMonth(transactions, getYear(new Date()), getMonth(new Date()));
-  const budgetStatus = buildEffectiveBudgetStatus(monthly, effectiveBudgets.length ? effectiveBudgets : budgets.map((b) => ({ ...b, effectiveBudget: b.amount_limit })));
-
-  const insights  = generateInsights({ transactions: monthly, goals });
-  const decisions = evaluateDecisions({ transactions: monthly, budgets: budgetStatus });
-
-  const TYPE_STYLES = {
-    reduction: { bg: 'rgba(99,102,241,.08)',  border: 'rgba(99,102,241,.2)',  color: '#818cf8', icon: '📉' },
-    warning:   { bg: 'rgba(245,158,11,.08)',  border: 'rgba(245,158,11,.2)',  color: '#f59e0b', icon: '⚠️' },
-    savings:   { bg: 'rgba(244,63,94,.08)',   border: 'rgba(244,63,94,.2)',   color: '#f43f5e', icon: '🏦' },
-    positive:  { bg: 'rgba(34,197,94,.08)',   border: 'rgba(34,197,94,.2)',   color: '#22c55e', icon: '✅' },
-    critical:  { bg: 'rgba(244,63,94,.12)',   border: 'rgba(244,63,94,.35)',  color: '#f43f5e', icon: '🚨' },
-    goal:      { bg: 'rgba(129,140,248,.08)', border: 'rgba(129,140,248,.2)', color: '#818cf8', icon: '🎯' },
-  };
-
-  if (insights.length === 0 && decisions.negatives.length === 0) {
-    return <EmptyState icon="✅" title="All clear" subtitle="No issues detected this month. Keep it up!" />;
-  }
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-      {insights.map((ins, i) => {
-        const s = TYPE_STYLES[ins.type] || TYPE_STYLES.warning;
-        return (
-          <div key={i} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 12, padding: '0.875rem', display: 'flex', gap: '0.625rem' }}>
-            <span style={{ fontSize: '1rem', flexShrink: 0 }}>{s.icon}</span>
-            <p style={{ fontSize: '0.82rem', color: s.color, lineHeight: 1.55, margin: 0 }}>{ins.message}</p>
-          </div>
-        );
-      })}
-
-      {(decisions.positives[0] || decisions.negatives[0]) && (
-        <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '0.875rem' }}>
-          <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: '0.625rem' }}>Decision Reflection</p>
-          {decisions.positives[0] && (
-            <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-              <span>👍</span>
-              <p style={{ fontSize: '0.8rem', color: '#22c55e', lineHeight: 1.5 }}>
-                <strong>Best:</strong> {fmt(decisions.positives[0].under)} under budget in {decisions.positives[0].category}
-              </p>
-            </div>
-          )}
-          {decisions.negatives[0] && (
-            <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <span>👎</span>
-              <p style={{ fontSize: '0.8rem', color: '#f43f5e', lineHeight: 1.5 }}>
-                <strong>Improve:</strong> {fmt(decisions.negatives[0].over)} over budget in {decisions.negatives[0].category}
-              </p>
-            </div>
-          )}
+      {vacations.length === 0 ? (
+        <EmptyState icon="✈️" title="No trips planned" subtitle="Add a destination and start saving toward it" />
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          {vacations.map((v) => {
+            const linkedGoal = goals.find((g) => g.id === v.linked_goal_id);
+            const pace       = calcVacationPace(v, linkedGoal);
+            const pct        = pace.total > 0 ? Math.min((pace.saved / pace.total) * 100, 100) : 0;
+            const color      = pct >= 100 ? '#22c55e' : pct > 60 ? '#818cf8' : '#f59e0b';
+            return (
+              <div key={v.id} className="card">
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
+                  <div>
+                    <p style={{ fontWeight: 800, color: '#f1f5f9', fontSize: '0.975rem' }}>✈️ {v.destination}</p>
+                    <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
+                      {format(parseISO(v.trip_date), 'MMMM d, yyyy')} · {pace.daysLeft} days away
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    <button onClick={() => { setEditItem(v); setForm({ destination: v.destination, trip_date: v.trip_date, total_budget: String(v.total_budget), flight_budget: String(v.flight_budget || ''), hotel_budget: String(v.hotel_budget || ''), misc_budget: String(v.misc_budget || ''), linked_goal_id: v.linked_goal_id || '' }); }} style={{ background: 'rgba(129,140,248,.08)', color: '#818cf8', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}>✏️</button>
+                    <button onClick={async () => { if (!window.confirm(`Delete trip to "${v.destination}"?`)) return; await deleteVacation(v.id); push('Removed', 'warning'); }} style={{ background: 'rgba(244,63,94,.06)', color: '#f43f5e', border: 'none', borderRadius: 8, padding: '5px 8px', cursor: 'pointer' }}><Trash2 size={13} /></button>
+                  </div>
+                </div>
+                <div style={{ background: '#0f172a', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: '0.375rem' }}>
+                  <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 999, transition: 'width .4s' }} />
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                  <span>{fmt(pace.saved)} saved of {fmt(pace.total)}</span>
+                  <span style={{ color }}>{pct.toFixed(0)}%</span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.375rem' }}>
+                  {[['Per Day', pace.perDay], ['Per Week', pace.perWeek], ['Per Month', pace.perMonth]].map(([l, v2]) => (
+                    <div key={l} style={{ background: '#0f172a', borderRadius: 8, padding: '0.4rem', textAlign: 'center' }}>
+                      <p style={{ fontSize: '0.62rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.15rem' }}>{l}</p>
+                      <p style={{ fontWeight: 700, color: '#818cf8', fontSize: '0.82rem' }}>{fmt(v2)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
   );
 }
 
-// ── Main Planning page ────────────────────────────────────────────────────
-const TABS = ['Budgets', 'Bills', 'Insights'];
+// ── Main GoalsHub page ────────────────────────────────────────────────────
+const TABS = ['Savings', 'Vacations'];
 
-export default function Planning() {
-  const [active, setActive] = useState('Budgets');
-  const { expenses } = useFixedExpenses();
-
-  // badge counts
-  const urgentBills = expenses.filter((e) => {
-    const d = differenceInDays(parseISO(e.next_due_date), new Date());
-    return d >= 0 && d <= 3;
-  }).length;
-
-  function addButton() {
-    if (active === 'Budgets') return true;
-    if (active === 'Bills')   return true;
-    return false;
-  }
-
-  const [showBillForm, setShowBillForm] = useState(false);
-  const [showBudgetAdd, setShowBudgetAdd] = useState(false);
+export default function GoalsHub() {
+  const [active, setActive] = useState('Savings');
+  const [showAddGoal,     setShowAddGoal]     = useState(false);
+  const [showAddVacation, setShowAddVacation] = useState(false);
 
   return (
     <div className="page">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <h1>Planning</h1>
-        {active === 'Bills' && (
-          <button onClick={() => setShowBillForm(true)} style={{ background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-            <Plus size={20} strokeWidth={2.5} />
-          </button>
-        )}
+        <h1>Goals</h1>
+        <button onClick={() => active === 'Savings' ? setShowAddGoal((p) => !p) : setShowAddVacation((p) => !p)} style={{
+          background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
+          width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+        }}>
+          <Plus size={20} strokeWidth={2.5} />
+        </button>
       </div>
 
-      {/* Tab bar */}
       <div style={{ display: 'flex', background: '#1e293b', borderRadius: 10, padding: 3, marginBottom: '1.25rem' }}>
         {TABS.map((t) => (
           <button key={t} onClick={() => setActive(t)} style={{
             flex: 1, padding: '0.55rem', borderRadius: 8, border: 'none', cursor: 'pointer',
             background: active === t ? '#334155' : 'transparent',
             color: active === t ? '#f1f5f9' : '#64748b',
-            fontWeight: 600, fontSize: '0.82rem', fontFamily: 'inherit',
-            position: 'relative', transition: 'all .15s'
-          }}>
-            {t}
-            {t === 'Bills' && urgentBills > 0 && (
-              <span style={{ position: 'absolute', top: 4, right: 6, background: '#f43f5e', color: '#fff', borderRadius: '50%', width: 14, height: 14, fontSize: '0.55rem', fontWeight: 800, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                {urgentBills}
-              </span>
-            )}
-          </button>
+            fontWeight: 600, fontSize: '0.82rem', fontFamily: 'inherit'
+          }}>{t === 'Savings' ? '🎯 Savings' : '✈️ Vacations'}</button>
         ))}
       </div>
 
-      {active === 'Budgets'  && <BudgetsTab />}
-      {active === 'Bills'    && <BillsTab   showExternalForm={showBillForm} onFormClose={() => setShowBillForm(false)} />}
-      {active === 'Insights' && <InsightsTab />}
+      {active === 'Savings'   && <SavingsTab   externalShowForm={showAddGoal}     onFormClose={() => setShowAddGoal(false)} />}
+      {active === 'Vacations' && <VacationsTab externalShowForm={showAddVacation} onFormClose={() => setShowAddVacation(false)} />}
     </div>
   );
 }
