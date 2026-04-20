@@ -87,9 +87,26 @@ export function TransactionForm({ initial, onSave, onClose, availableBalance, bu
   };
 
   return (
-    <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,.75)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#1e293b', borderRadius: '20px 20px 0 0', border: '1px solid #334155', width: '100%', maxWidth: 600, padding: '1.5rem 1.25rem', paddingBottom: 'calc(1.5rem + env(safe-area-inset-bottom, 0px))', maxHeight: '92dvh', overflowY: 'auto' }}>
+    <div
+      style={{
+        position: 'fixed', inset: 0, zIndex: 500,
+        background: 'rgba(0,0,0,.75)', backdropFilter: 'blur(4px)',
+        display: 'flex', alignItems: 'flex-start', justifyContent: 'center',
+        overflowY: 'auto',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
+      }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}
+    >
+      <div style={{
+        background: '#1e293b',
+        borderRadius: 20,
+        border: '1px solid #334155',
+        width: '100%',
+        maxWidth: 600,
+        margin: '1rem',
+        marginBottom: 'calc(1rem + env(safe-area-inset-bottom, 0px))',
+        padding: '1.5rem 1.25rem 1.5rem',
+      }}>
 
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <h2 style={{ color: '#f1f5f9' }}>{initial ? 'Edit Transaction' : 'New Transaction'}</h2>
@@ -170,7 +187,6 @@ export function TransactionForm({ initial, onSave, onClose, availableBalance, bu
               {errors.savings_allocation && <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>{errors.savings_allocation}</p>}
             </div>
 
-            {/* Where do savings go */}
             {form.savings_allocation && Number(form.savings_allocation) > 0 && accounts.length > 0 && (
               <div style={{ marginBottom: '1rem' }}>
                 <label style={S.label}>Save to Account</label>
