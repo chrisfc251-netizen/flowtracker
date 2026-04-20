@@ -76,7 +76,7 @@ function SavingsTab({ showForm, setShowForm }) {
           <input type="text"   placeholder="Goal name"         value={goalName}    onChange={(e) => setGoalName(e.target.value)} />
           <input type="number" placeholder="Target ($)"        value={goalTarget}  onChange={(e) => setGoalTarget(e.target.value)} />
           <input type="number" placeholder="Already saved ($)" value={goalCurrent} onChange={(e) => setGoalCurrent(e.target.value)} />
-          <input type="date"                                    value={goalDate}    onChange={(e) => setGoalDate(e.target.value)} />
+          <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#f1f5f9', padding: '0.75rem 1rem', fontSize: '1rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', minHeight: '48px' }} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="submit" style={{ flex: 1, background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save Goal</button>
             <button type="button" onClick={() => setShowForm(false)} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 8, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
