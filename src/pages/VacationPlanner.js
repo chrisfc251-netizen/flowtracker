@@ -33,17 +33,17 @@ function VacationForm({ initial, goals, onSave, onClose }) {
   }
 
   const S = {
-    inp:   { background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#f1f5f9', padding: '0.75rem 1rem', fontSize: '1rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' },
-    label: { display: 'block', fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginBottom: '0.4rem' },
+    inp:   { background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--ink-1)', padding: '0.75rem 1rem', fontSize: '1rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' },
+    label: { display: 'block', fontSize: '0.8rem', color: 'var(--ink-3)', fontWeight: 700, marginBottom: '0.4rem' },
   };
 
   return (
     <div style={{ position: 'fixed', inset: 0, zIndex: 500, background: 'rgba(0,0,0,.75)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}>
-      <div style={{ background: '#1e293b', borderRadius: '20px 20px 0 0', border: '1px solid #334155', width: '100%', maxWidth: 600, padding: '1.5rem 1.25rem 2rem', maxHeight: '90dvh', overflowY: 'auto' }}>
+      <div style={{ background: 'var(--bg)', borderRadius: '20px 20px 0 0', border: '1px solid var(--border)', borderBottom: 'none', width: '100%', maxWidth: 600, padding: '1.5rem 1.25rem 2rem', maxHeight: '90dvh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2 style={{ color: '#f1f5f9' }}>{initial ? 'Edit Trip' : 'Plan a Trip ✈️'}</h2>
-          <button onClick={onClose} style={{ background: '#334155', border: 'none', borderRadius: 8, color: '#94a3b8', width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>✕</button>
+          <h2 style={{ color: 'var(--ink-1)' }}>{initial ? 'Edit Trip' : 'Plan a Trip ✈️'}</h2>
+          <button onClick={onClose} style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--ink-3)', width: 30, height: 30, cursor: 'pointer', fontSize: 16, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -55,9 +55,9 @@ function VacationForm({ initial, goals, onSave, onClose }) {
 
           <div><label style={S.label}>Total Budget ($)</label>
             <input type="number" inputMode="decimal" placeholder="0.00" value={form.total_budget} onChange={(e) => set('total_budget', e.target.value)}
-              style={{ ...S.inp, fontSize: '1.375rem', fontWeight: 800, textAlign: 'center', color: '#818cf8' }} /></div>
+              style={{ ...S.inp, fontSize: '1.375rem', fontWeight: 800, textAlign: 'center' }} /></div>
 
-          <p style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Budget Breakdown (optional)</p>
+          <p style={{ fontSize: '0.75rem', color: 'var(--ink-3)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Budget Breakdown (optional)</p>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
             {[['flight_budget','✈️ Flight'], ['hotel_budget','🏨 Hotel'], ['misc_budget','🎒 Misc']].map(([k, label]) => (
@@ -116,7 +116,7 @@ export default function VacationPlanner() {
     push('Trip removed', 'warning');
   }
 
-  if (loading) return <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}><p style={{ color: '#475569' }}>Loading…</p></div>;
+  if (loading) return <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}><p style={{ color: 'var(--ink-3)' }}>Loading…</p></div>;
 
   return (
     <div className="page">
@@ -126,13 +126,13 @@ export default function VacationPlanner() {
           <Plus size={20} strokeWidth={2.5} />
         </button>
       </div>
-      <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>Plan trips and track how much you need to save</p>
+      <p style={{ fontSize: '0.85rem', color: 'var(--ink-3)', marginBottom: '1.25rem' }}>Plan trips and track how much you need to save</p>
 
       {vacations.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
           <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>✈️</div>
-          <p style={{ fontWeight: 700, color: '#f1f5f9', marginBottom: '0.375rem' }}>No trips planned yet</p>
-          <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.25rem' }}>Add a destination and the app will tell you how much to save per week.</p>
+          <p style={{ fontWeight: 700, color: 'var(--ink-1)', marginBottom: '0.375rem' }}>No trips planned yet</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: '1.25rem' }}>Add a destination and the app will tell you how much to save per week.</p>
           <button onClick={() => setShowForm(true)} style={{ background: '#818cf8', color: '#fff', border: 'none', borderRadius: 10, padding: '0.75rem 1.5rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
             Plan a Trip
           </button>
@@ -146,12 +146,12 @@ export default function VacationPlanner() {
             const color      = pct >= 100 ? '#22c55e' : pct > 60 ? '#818cf8' : '#f59e0b';
 
             return (
-              <div key={v.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 14, padding: '1rem' }}>
+              <div key={v.id} style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 14, padding: '1rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem' }}>
                   <div>
-                    <p style={{ fontWeight: 800, color: '#f1f5f9', fontSize: '1rem' }}>✈️ {v.destination}</p>
-                    <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.15rem' }}>
-                      {format(parseISO(v.trip_date), 'MMMM d, yyyy')} · {pace.daysLeft} days away
+                    <p style={{ fontWeight: 800, color: 'var(--ink-1)', fontSize: '1rem' }}>✈️ {v.destination}</p>
+                    <p style={{ fontSize: '0.78rem', color: 'var(--ink-3)', marginTop: '0.15rem' }}>
+                      <span style={{ color: 'var(--ink-3)' }}>{format(parseISO(v.trip_date), 'MMMM d, yyyy')} · {pace.daysLeft} days away</span>
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.375rem' }}>
@@ -165,11 +165,11 @@ export default function VacationPlanner() {
                 </div>
 
                 {/* Progress bar */}
-                <div style={{ background: '#0f172a', borderRadius: 999, height: 8, overflow: 'hidden', marginBottom: '0.5rem' }}>
+                <div style={{ background: 'var(--bg-inset)', borderRadius: 999, height: 8, overflow: 'hidden', marginBottom: '0.5rem' }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 999, transition: 'width .4s' }} />
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.875rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: 'var(--ink-3)', marginBottom: '0.875rem' }}>
                   <span>{formatUSD(pace.saved)} saved of {formatUSD(pace.total)}</span>
                   <span style={{ color }}>{pct.toFixed(0)}%</span>
                 </div>
@@ -181,8 +181,8 @@ export default function VacationPlanner() {
                     { label: 'Per Week',  value: formatUSD(pace.perWeek)  },
                     { label: 'Per Month', value: formatUSD(pace.perMonth) },
                   ].map((item) => (
-                    <div key={item.label} style={{ background: '#0f172a', borderRadius: 8, padding: '0.5rem', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.65rem', color: '#64748b', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</p>
+                    <div key={item.label} style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '0.5rem', textAlign: 'center', border: '1px solid var(--border)' }}>
+                      <p style={{ fontSize: '0.65rem', color: 'var(--ink-3)', marginBottom: '0.2rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>{item.label}</p>
                       <p style={{ fontWeight: 700, color: '#818cf8', fontSize: '0.875rem' }}>{item.value}</p>
                     </div>
                   ))}
@@ -190,10 +190,10 @@ export default function VacationPlanner() {
 
                 {/* Budget breakdown */}
                 {(v.flight_budget > 0 || v.hotel_budget > 0 || v.misc_budget > 0) && (
-                  <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #334155', display: 'flex', gap: '0.5rem' }}>
-                    {v.flight_budget > 0 && <span style={{ fontSize: '0.75rem', color: '#64748b' }}>✈️ {formatUSD(v.flight_budget)}</span>}
-                    {v.hotel_budget  > 0 && <span style={{ fontSize: '0.75rem', color: '#64748b' }}>🏨 {formatUSD(v.hotel_budget)}</span>}
-                    {v.misc_budget   > 0 && <span style={{ fontSize: '0.75rem', color: '#64748b' }}>🎒 {formatUSD(v.misc_budget)}</span>}
+                  <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid var(--border)', display: 'flex', gap: '0.5rem' }}>
+                    {v.flight_budget > 0 && <span style={{ fontSize: '0.75rem', color: 'var(--ink-3)' }}>✈️ {formatUSD(v.flight_budget)}</span>}
+                    {v.hotel_budget  > 0 && <span style={{ fontSize: '0.75rem', color: 'var(--ink-3)' }}>🏨 {formatUSD(v.hotel_budget)}</span>}
+                    {v.misc_budget   > 0 && <span style={{ fontSize: '0.75rem', color: 'var(--ink-3)' }}>🎒 {formatUSD(v.misc_budget)}</span>}
                   </div>
                 )}
 

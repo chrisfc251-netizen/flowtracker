@@ -55,71 +55,57 @@ export function useAccounts() {
     return { data: true };
   }, [user]);
 
-  /**
-   * Compute per-account balances.
-   *
-   * Legacy mode (savingsAllocationsPerAccount = null):
-   *   income account  → amount - savings_allocation
-   *   savings account → savings_allocation
-   *   savingsBreakdown[savings_account_id] += savings_allocation  ← correct source for breakdown
-   *
-   * New allocations mode (savingsAllocationsPerAccount provided):
-   *   income account → full amount
-   *   savingsBreakdown sourced from allocations table
-   *
-   * Transfers affect totals only — never income/expense reports.
-   * available = total_balance - savings_balance
-   */
-  function computeAccountBalances(transactions, transfers, savingsAllocationsPerAccount = null) {
-    const balances           = {};
-    const savingsBreakdown   = {};
-    const availableBreakdown = {};
+  // Compute balance for each account from transactions + transfers + savings adjustments
+  // savingsAdjustments: optional array from useSavingsAdjustments — reallocates the
+  // *savings attribution* between accounts without changing the total savings pool.
+  function computeAccountBalances(transactions, transfers, savingsAdjustments = []) {
+    const balances = {};
+    const savingsBreakdown = {};
 
     for (const a of accounts) {
-      balances[a.id]           = 0;
-      savingsBreakdown[a.id]   = 0;
-      availableBreakdown[a.id] = 0;
+      balances[a.id] = 0;
+      savingsBreakdown[a.id] = 0;
     }
 
     for (const t of transactions) {
       if (!t.account_id || !balances.hasOwnProperty(t.account_id)) continue;
-
       if (t.type === 'income') {
-        if (savingsAllocationsPerAccount) {
-          balances[t.account_id] += Number(t.amount);
-        } else {
-          // Legacy: spendable portion to source account, savings to savings_account_id
-          const spendable = Number(t.amount) - Number(t.savings_allocation || 0);
-          balances[t.account_id] += spendable;
-          if (t.savings_allocation && t.savings_account_id) {
-            if (balances.hasOwnProperty(t.savings_account_id)) {
-              balances[t.savings_account_id]         += Number(t.savings_allocation);
-              savingsBreakdown[t.savings_account_id] += Number(t.savings_allocation);
-            }
-          }
-        }
-      } else if (t.type === 'expense') {
+        const spendable = Number(t.amount) - Number(t.savings_allocation || 0);
+        balances[t.account_id] += spendable;
+      } else {
         balances[t.account_id] -= Number(t.amount);
       }
-    }
-
-    if (savingsAllocationsPerAccount) {
-      for (const id of Object.keys(balances)) {
-        savingsBreakdown[id] = savingsAllocationsPerAccount[id] || 0;
+      // Savings go to savings_account_id
+      if (t.savings_allocation && t.savings_account_id) {
+        if (balances.hasOwnProperty(t.savings_account_id)) {
+          balances[t.savings_account_id]         += Number(t.savings_allocation);
+          savingsBreakdown[t.savings_account_id] += Number(t.savings_allocation);
+        }
       }
     }
 
-    // Transfers: balance impact only
     for (const tr of transfers) {
       if (balances.hasOwnProperty(tr.from_account_id)) balances[tr.from_account_id] -= Number(tr.amount);
       if (balances.hasOwnProperty(tr.to_account_id))   balances[tr.to_account_id]   += Number(tr.amount);
     }
 
-    for (const id of Object.keys(balances)) {
-      availableBreakdown[id] = Math.max(0, balances[id] - savingsBreakdown[id]);
+    // Apply savings reallocations — shifts savings attribution between accounts.
+    // The account balance (spendable) is unchanged; only savingsBreakdown shifts.
+    for (const adj of savingsAdjustments) {
+      if (adj.from_account_id && savingsBreakdown.hasOwnProperty(adj.from_account_id)) {
+        savingsBreakdown[adj.from_account_id] -= Number(adj.amount);
+      }
+      if (adj.to_account_id && savingsBreakdown.hasOwnProperty(adj.to_account_id)) {
+        savingsBreakdown[adj.to_account_id] += Number(adj.amount);
+      }
     }
 
-    return { balances, savingsBreakdown, availableBreakdown };
+    // Clamp savings to 0 (guard against bad data / out-of-order adjustments)
+    for (const id of Object.keys(savingsBreakdown)) {
+      if (savingsBreakdown[id] < 0) savingsBreakdown[id] = 0;
+    }
+
+    return { balances, savingsBreakdown };
   }
 
   return {

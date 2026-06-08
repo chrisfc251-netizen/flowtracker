@@ -76,11 +76,11 @@ function PaceBlock({ pace }) {
           ].map(item => (
             <div key={item.label} style={{ textAlign: 'center' }}>
               <p style={{ fontSize: '0.875rem', fontWeight: 800, color: '#f59e0b' }}>{item.value}</p>
-              <p style={{ fontSize: '0.62rem', color: '#475569' }}>{item.label}</p>
+              <p style={{ fontSize: '0.62rem', color: 'var(--ink-3)' }}>{item.label}</p>
             </div>
           ))}
         </div>
-        <p style={{ fontSize: '0.68rem', color: '#475569', marginTop: '0.375rem' }}>
+        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', marginTop: '0.375rem' }}>
           {paceLabel(pace.daysLeft)} until deadline — start contributing to track your pace
         </p>
       </div>
@@ -88,7 +88,7 @@ function PaceBlock({ pace }) {
   }
 
   if (!pace.hasData) return (
-    <p style={{ fontSize: '0.72rem', color: '#475569', marginTop: '0.5rem', fontStyle: 'italic' }}>
+    <p style={{ fontSize: '0.72rem', color: 'var(--ink-3)', marginTop: '0.5rem', fontStyle: 'italic' }}>
       Add your first contribution to see pace estimates
     </p>
   );
@@ -106,11 +106,11 @@ function PaceBlock({ pace }) {
         ].map(item => (
           <div key={item.label} style={{ textAlign: 'center' }}>
             <p style={{ fontSize: '0.875rem', fontWeight: 800, color: '#818cf8' }}>{item.value}</p>
-            <p style={{ fontSize: '0.62rem', color: '#475569' }}>{item.label}</p>
+            <p style={{ fontSize: '0.62rem', color: 'var(--ink-3)' }}>{item.label}</p>
           </div>
         ))}
       </div>
-      <p style={{ fontSize: '0.68rem', color: '#475569' }}>
+      <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)' }}>
         🕐 Goal reached in {paceLabel(pace.daysLeft)}
       </p>
     </div>
@@ -147,8 +147,8 @@ function GoalCard({ goal, onAdd, onSubtract, onDelete }) {
 
   return (
     <div style={{
-      background: '#1e293b',
-      border: `1px solid ${done ? 'rgba(34,197,94,0.25)' : '#334155'}`,
+      background: 'var(--bg-card)',
+      border: `1px solid ${done ? 'rgba(34,197,94,0.35)' : 'var(--border)'}`,
       borderRadius: 16, padding: '1rem',
       position: 'relative', overflow: 'hidden',
     }}>
@@ -160,29 +160,29 @@ function GoalCard({ goal, onAdd, onSubtract, onDelete }) {
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
               {isVacation && <Plane size={13} color="#06b6d4" />}
-              <p style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.925rem' }}>
+              <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontSize: '0.925rem' }}>
                 {goal.name}
                 {done && <span style={{ marginLeft: 6, fontSize: '0.68rem', color: '#22c55e', fontWeight: 800 }}>DONE ✓</span>}
               </p>
             </div>
             {goal.target_date && (
-              <p style={{ fontSize: '0.7rem', color: '#475569', marginTop: '0.1rem' }}>By {goal.target_date}</p>
+              <p style={{ fontSize: '0.7rem', color: 'var(--ink-3)', marginTop: '0.1rem' }}>By {goal.target_date}</p>
             )}
           </div>
           <div style={{ textAlign: 'right' }}>
-            <p style={{ fontSize: '0.875rem', fontWeight: 800, color: '#f1f5f9' }}>{fmt(current)}</p>
-            <p style={{ fontSize: '0.68rem', color: '#475569' }}>of {fmt(target)}</p>
+            <p style={{ fontSize: '0.875rem', fontWeight: 800, color: 'var(--ink-1)' }}>{fmt(current)}</p>
+            <p style={{ fontSize: '0.68rem', color: 'var(--ink-4)' }}>of {fmt(target)}</p>
           </div>
         </div>
 
         {/* Progress bar */}
-        <div style={{ background: '#0f172a', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: '0.375rem' }}>
+        <div style={{ background: 'var(--bg-inset)', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: '0.375rem' }}>
           <div style={{ width: `${pct}%`, height: '100%', borderRadius: 999, background: accentColor, transition: 'width 0.5s' }} />
         </div>
 
         {/* Status row */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <p style={{ fontSize: '0.72rem', color: '#475569' }}>
+          <p style={{ fontSize: '0.72rem', color: 'var(--ink-3)' }}>
             {done ? '🎉 Goal reached!' : `${Math.round(pct)}% · ${fmt(Math.max(target - current, 0))} left`}
           </p>
           <div style={{ display: 'flex', gap: '0.375rem' }}>
@@ -197,7 +197,7 @@ function GoalCard({ goal, onAdd, onSubtract, onDelete }) {
               </button>
             )}
             <button onClick={() => onDelete(goal.id, goal.name)} style={{
-              background: 'transparent', border: 'none', color: '#334155',
+              background: 'transparent', border: 'none', color: 'var(--ink-4)',
               cursor: 'pointer', padding: '3px', display: 'flex', alignItems: 'center',
             }}>
               <Trash2 size={13} />
@@ -216,7 +216,7 @@ function GoalCard({ goal, onAdd, onSubtract, onDelete }) {
         {/* Contribution input */}
         {showInput && !done && (
           <div style={{ marginTop: '0.75rem' }}>
-            <div style={{ display: 'flex', background: '#0f172a', borderRadius: 8, padding: 3, gap: 3, marginBottom: '0.5rem' }}>
+            <div style={{ display: 'flex', background: 'var(--bg-inset)', borderRadius: 8, padding: 3, gap: 3, marginBottom: '0.5rem', border: '1px solid var(--border)' }}>
               {[
                 { val: 'add',      label: '+ Add',     color: '#22c55e' },
                 { val: 'subtract', label: '− Correct',  color: '#f43f5e' },
@@ -227,7 +227,7 @@ function GoalCard({ goal, onAdd, onSubtract, onDelete }) {
                   background: action === opt.val
                     ? (opt.val === 'add' ? 'rgba(34,197,94,0.18)' : 'rgba(244,63,94,0.18)')
                     : 'transparent',
-                  color: action === opt.val ? opt.color : '#475569',
+                  color: action === opt.val ? opt.color : 'var(--ink-3)',
                   fontWeight: 700, fontSize: '0.78rem', fontFamily: 'inherit',
                 }}>
                   {opt.label}
@@ -244,8 +244,8 @@ function GoalCard({ goal, onAdd, onSubtract, onDelete }) {
                 onChange={e => setAmount(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleAction()}
                 style={{
-                  flex: 1, background: '#0f172a', border: '1px solid #334155',
-                  borderRadius: 8, color: '#f1f5f9', padding: '0.5rem 0.75rem',
+                  flex: 1, background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                  borderRadius: 8, color: 'var(--ink-1)', padding: '0.5rem 0.75rem',
                   fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit',
                 }}
               />
@@ -293,7 +293,7 @@ function VacationBreakdown({ items }) {
         <div style={{ marginTop: '0.375rem', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
           {items.map((item, i) => (
             <div key={i} style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{item.label}</span>
+              <span style={{ fontSize: '0.78rem', color: 'var(--ink-3)' }}>{item.label}</span>
               <span style={{ fontSize: '0.78rem', fontWeight: 700, color: '#06b6d4' }}>{fmt(item.amount)}</span>
             </div>
           ))}
@@ -342,8 +342,8 @@ function VacationPlannerForm({ onSave, onCancel }) {
   }
 
   const inputStyle = {
-    background: '#0f172a', border: '1px solid #334155', borderRadius: 8,
-    color: '#f1f5f9', padding: '0.5rem 0.75rem',
+    background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 8,
+    color: 'var(--ink-1)', padding: '0.5rem 0.75rem',
     fontSize: '0.875rem', outline: 'none', fontFamily: 'inherit',
     width: '100%', boxSizing: 'border-box',
   };
@@ -352,7 +352,7 @@ function VacationPlannerForm({ onSave, onCancel }) {
     <div className="card" style={{ marginBottom: '1rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.875rem' }}>
         <Plane size={16} color="#06b6d4" />
-        <p style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.9rem' }}>Vacation Planner</p>
+        <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontSize: '0.9rem' }}>Vacation Planner</p>
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
@@ -367,17 +367,17 @@ function VacationPlannerForm({ onSave, onCancel }) {
           type="date"
           value={date}
           onChange={e => setDate(e.target.value)}
-          style={{ ...inputStyle, color: date ? '#f1f5f9' : '#475569' }}
+          style={{ ...inputStyle, color: date ? 'var(--ink-1)' : 'var(--ink-4)' }}
         />
 
-        <div style={{ background: '#0f172a', borderRadius: 10, padding: '0.75rem' }}>
-          <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
+        <div style={{ background: 'var(--bg-inset)', borderRadius: 10, padding: '0.75rem', border: '1px solid var(--border)' }}>
+          <p style={{ fontSize: '0.7rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
             Estimated Costs
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {VACATION_ITEMS.map(vi => (
               <div key={vi.key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.75rem' }}>
-                <span style={{ fontSize: '0.82rem', color: '#94a3b8', minWidth: 140 }}>{vi.label}</span>
+                <span style={{ fontSize: '0.82rem', color: 'var(--ink-2)', minWidth: 140 }}>{vi.label}</span>
                 <input
                   type="number"
                   inputMode="decimal"
@@ -393,10 +393,10 @@ function VacationPlannerForm({ onSave, onCancel }) {
           {total > 0 && (
             <div style={{
               marginTop: '0.75rem', paddingTop: '0.625rem',
-              borderTop: '1px solid #334155',
+              borderTop: '1px solid var(--border)',
               display: 'flex', justifyContent: 'space-between', alignItems: 'center',
             }}>
-              <span style={{ fontSize: '0.82rem', color: '#94a3b8', fontWeight: 600 }}>Total trip cost</span>
+              <span style={{ fontSize: '0.82rem', color: 'var(--ink-2)', fontWeight: 600 }}>Total trip cost</span>
               <span style={{ fontSize: '1rem', fontWeight: 800, color: '#06b6d4' }}>{fmt(total)}</span>
             </div>
           )}
@@ -409,8 +409,8 @@ function VacationPlannerForm({ onSave, onCancel }) {
           disabled={!name.trim() || total <= 0}
           style={{
             flex: 1,
-            background: !name.trim() || total <= 0 ? '#1e293b' : '#06b6d4',
-            color: !name.trim() || total <= 0 ? '#334155' : '#fff',
+            background: !name.trim() || total <= 0 ? 'var(--bg-inset)' : '#06b6d4',
+            color: !name.trim() || total <= 0 ? 'var(--ink-4)' : '#fff',
             border: 'none', borderRadius: 8, padding: '0.65rem',
             fontWeight: 700, cursor: !name.trim() || total <= 0 ? 'default' : 'pointer',
           }}
@@ -418,8 +418,8 @@ function VacationPlannerForm({ onSave, onCancel }) {
           Create Vacation Goal
         </button>
         <button onClick={onCancel} style={{
-          flex: 1, background: 'transparent', border: '1px solid #334155',
-          borderRadius: 8, padding: '0.65rem', color: '#64748b',
+          flex: 1, background: 'transparent', border: '1px solid var(--border)',
+          borderRadius: 8, padding: '0.65rem', color: 'var(--ink-3)',
           fontWeight: 600, cursor: 'pointer',
         }}>
           Cancel
@@ -446,8 +446,8 @@ export default function Goals() {
 
   const inputStyle = {
     width: '100%', boxSizing: 'border-box',
-    background: '#0f172a', border: '1px solid #334155',
-    borderRadius: 8, color: '#f1f5f9',
+    background: 'var(--bg-inset)', border: '1px solid var(--border)',
+    borderRadius: 8, color: 'var(--ink-1)',
     padding: '0.625rem 0.875rem', fontSize: '0.9rem',
     outline: 'none', fontFamily: 'inherit',
   };
@@ -508,7 +508,7 @@ export default function Goals() {
           </button>
         )}
       </div>
-      <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1.25rem' }}>
+      <p style={{ fontSize: '0.82rem', color: 'var(--ink-3)', marginBottom: '1.25rem' }}>
         What you're saving toward
       </p>
 
@@ -542,7 +542,7 @@ export default function Goals() {
       {/* Standard goal form */}
       {showForm && (
         <div className="card" style={{ marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
-          <p style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.9rem' }}>New Savings Goal</p>
+          <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontSize: '0.9rem' }}>New Savings Goal</p>
           <input
             type="text" placeholder="Goal name"
             value={name} onChange={e => setName(e.target.value)}
@@ -562,7 +562,7 @@ export default function Goals() {
           </div>
           <input
             type="date" value={date} onChange={e => setDate(e.target.value)}
-            style={{ ...inputStyle, color: date ? '#f1f5f9' : '#475569' }}
+            style={{ ...inputStyle, color: date ? 'var(--ink-1)' : 'var(--ink-4)' }}
           />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button
@@ -570,8 +570,8 @@ export default function Goals() {
               disabled={saving || !name || !target}
               style={{
                 flex: 1,
-                background: !name || !target ? '#1e293b' : '#22c55e',
-                color: !name || !target ? '#334155' : '#fff',
+                background: !name || !target ? 'var(--bg-inset)' : '#22c55e',
+                color: !name || !target ? 'var(--ink-4)' : '#fff',
                 border: 'none', borderRadius: 8, padding: '0.65rem',
                 fontWeight: 700, cursor: !name || !target ? 'default' : 'pointer',
               }}
@@ -579,8 +579,8 @@ export default function Goals() {
               {saving ? '…' : 'Save Goal'}
             </button>
             <button onClick={() => setShowForm(false)} style={{
-              flex: 1, background: 'transparent', border: '1px solid #334155',
-              borderRadius: 8, padding: '0.65rem', color: '#64748b',
+              flex: 1, background: 'transparent', border: '1px solid var(--border)',
+              borderRadius: 8, padding: '0.65rem', color: 'var(--ink-3)',
               fontWeight: 600, cursor: 'pointer',
             }}>
               Cancel
@@ -608,7 +608,7 @@ export default function Goals() {
         <>
           {activeGoals.length > 0 && (
             <>
-              <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
+              <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
                 In Progress ({activeGoals.length})
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem', marginBottom: '1rem' }}>
@@ -633,7 +633,7 @@ export default function Goals() {
 
           {doneGoals.length > 0 && (
             <>
-              <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
+              <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
                 Completed ({doneGoals.length})
               </p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>

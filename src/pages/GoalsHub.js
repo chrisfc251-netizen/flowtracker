@@ -67,7 +67,7 @@ function SavingsTab({ showForm, setShowForm }) {
     window.location.reload();
   }
 
-  if (loading) return <p style={{ color: '#475569', padding: '2rem', textAlign: 'center' }}>Loading…</p>;
+  if (loading) return <p style={{ color: 'var(--ink-3)', padding: '2rem', textAlign: 'center' }}>Loading…</p>;
 
   return (
     <div>
@@ -76,10 +76,10 @@ function SavingsTab({ showForm, setShowForm }) {
           <input type="text"   placeholder="Goal name"         value={goalName}    onChange={(e) => setGoalName(e.target.value)} />
           <input type="number" placeholder="Target ($)"        value={goalTarget}  onChange={(e) => setGoalTarget(e.target.value)} />
           <input type="number" placeholder="Already saved ($)" value={goalCurrent} onChange={(e) => setGoalCurrent(e.target.value)} />
-          <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#f1f5f9', padding: '0.75rem 1rem', fontSize: '1rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', minHeight: '48px' }} />
+          <input type="date" value={goalDate} onChange={(e) => setGoalDate(e.target.value)} style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--ink-1)', padding: '0.75rem 1rem', fontSize: '1rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', minHeight: '48px' }} />
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             <button type="submit" style={{ flex: 1, background: '#22c55e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>Save Goal</button>
-            <button type="button" onClick={() => setShowForm(false)} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 8, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+            <button type="button" onClick={() => setShowForm(false)} style={{ flex: 1, background: 'transparent', color: 'var(--ink-3)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
           </div>
         </form>
       )}
@@ -97,32 +97,32 @@ function SavingsTab({ showForm, setShowForm }) {
             const pace       = estimatePace(goal);
 
             return (
-              <div key={goal.id} className="card" style={{ borderColor: completed ? 'rgba(34,197,94,.3)' : undefined }}>
+              <div key={goal.id} className="card" style={{ background: 'var(--bg-card)', borderColor: completed ? 'rgba(34,197,94,.3)' : 'var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
                   <div>
-                    <strong style={{ color: '#fff', fontSize: '0.95rem' }}>{goal.name}</strong>
+                    <strong style={{ color: 'var(--ink-1)', fontSize: '0.95rem' }}>{goal.name}</strong>
                     {completed && <span style={{ marginLeft: '0.5rem', fontSize: '0.72rem', color: '#22c55e', fontWeight: 700 }}>✓ Done!</span>}
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span style={{ color: '#cbd5e1', fontSize: '0.82rem' }}>{fmt(current)} / {fmt(target)}</span>
+                    <span style={{ color: 'var(--ink-3)', fontSize: '0.82rem' }}>{fmt(current)} / {fmt(target)}</span>
                     <button onClick={async () => { if (!window.confirm(`Delete "${goal.name}"?`)) return; await deleteGoal(goal.id); push('Deleted', 'warning'); }} style={{ background: 'rgba(244,63,94,.1)', border: 'none', borderRadius: 6, padding: '3px 6px', cursor: 'pointer', color: '#f43f5e', display: 'flex' }}>
                       <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
 
-                <div style={{ background: '#0f172a', borderRadius: 999, height: 8, overflow: 'hidden' }}>
+                <div style={{ background: 'var(--bg-inset)', borderRadius: 999, height: 8, overflow: 'hidden' }}>
                   <div style={{ width: `${percentage}%`, height: '100%', background: color, borderRadius: 999, transition: 'width .4s' }} />
                 </div>
 
-                <div style={{ marginTop: '0.375rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b' }}>
-                  <span>{percentage.toFixed(0)}% · {fmt(Math.max(target - current, 0))} left</span>
-                  <span onClick={() => { setEditDeadlineId(goal.id); setNewDeadline(goal.target_date || ''); }} style={{ cursor: 'pointer', borderBottom: '1px dashed #334155' }}>
+                <div style={{ marginTop: '0.375rem', display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--ink-3)' }}>
+                  <span style={{ color: 'var(--ink-3)' }}>{percentage.toFixed(0)}% · {fmt(Math.max(target - current, 0))} left</span>
+                  <span onClick={() => { setEditDeadlineId(goal.id); setNewDeadline(goal.target_date || ''); }} style={{ cursor: 'pointer', borderBottom: '1px dashed var(--border)' }}>
                     {editDeadlineId === goal.id ? (
                       <span style={{ display: 'flex', gap: '0.375rem' }} onClick={(e) => e.stopPropagation()}>
-                        <input type="date" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)} style={{ fontSize: '0.72rem', padding: '1px 5px', background: '#0f172a', border: '1px solid #334155', borderRadius: 5, color: '#f1f5f9', fontFamily: 'inherit' }} />
+                        <input type="date" value={newDeadline} onChange={(e) => setNewDeadline(e.target.value)} style={{ fontSize: '0.72rem', padding: '1px 5px', background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 5, color: 'var(--ink-1)', fontFamily: 'inherit' }} />
                         <button onClick={() => handleUpdateDeadline(goal.id)} style={{ fontSize: '0.68rem', background: '#22c55e', border: 'none', borderRadius: 4, padding: '1px 7px', color: '#fff', cursor: 'pointer' }}>✓</button>
-                        <button onClick={() => setEditDeadlineId(null)} style={{ fontSize: '0.68rem', background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>✕</button>
+                        <button onClick={() => setEditDeadlineId(null)} style={{ fontSize: '0.68rem', background: 'transparent', border: 'none', color: 'var(--ink-3)', cursor: 'pointer' }}>✕</button>
                       </span>
                     ) : goal.target_date ? 'By ' + goal.target_date : 'Set deadline ✏️'}
                   </span>
@@ -130,7 +130,7 @@ function SavingsTab({ showForm, setShowForm }) {
 
                 {!completed && pace && (
                   <div style={{ marginTop: '0.5rem', background: 'rgba(129,140,248,.07)', border: '1px solid rgba(129,140,248,.12)', borderRadius: 8, padding: '0.4rem 0.75rem', fontSize: '0.78rem' }}>
-                    {!pace.hasData ? <span style={{ color: '#475569' }}>Add money to get pace estimate</span>
+                    {!pace.hasData ? <span style={{ color: 'var(--ink-3)' }}>Add money to get pace estimate</span>
                       : <span style={{ color: '#818cf8' }}>🕐 ${pace.avgPerDay.toFixed(2)}/day → <strong>{pace.label}</strong> to goal</span>}
                   </div>
                 )}
@@ -139,9 +139,9 @@ function SavingsTab({ showForm, setShowForm }) {
                   <div style={{ marginTop: '0.625rem' }}>
                     {activeGoalId === goal.id ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-                        <div style={{ display: 'flex', background: '#0f172a', borderRadius: 8, padding: 3, gap: 3 }}>
+                        <div style={{ display: 'flex', background: 'var(--bg-inset)', borderRadius: 8, padding: 3, gap: 3, border: '1px solid var(--border)' }}>
                           {[{ val: 'add', label: '+ Add', color: '#22c55e' }, { val: 'subtract', label: '− Correct', color: '#f43f5e' }].map((opt) => (
-                            <button key={opt.val} onClick={() => setGoalAction(opt.val)} style={{ flex: 1, padding: '0.35rem', borderRadius: 6, border: 'none', cursor: 'pointer', background: goalAction === opt.val ? (opt.val === 'add' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)') : 'transparent', color: goalAction === opt.val ? opt.color : '#475569', fontWeight: 700, fontSize: '0.78rem', fontFamily: 'inherit' }}>{opt.label}</button>
+                            <button key={opt.val} onClick={() => setGoalAction(opt.val)} style={{ flex: 1, padding: '0.35rem', borderRadius: 6, border: 'none', cursor: 'pointer', background: goalAction === opt.val ? (opt.val === 'add' ? 'rgba(34,197,94,.2)' : 'rgba(244,63,94,.2)') : 'transparent', color: goalAction === opt.val ? opt.color : 'var(--ink-3)', fontWeight: 700, fontSize: '0.78rem', fontFamily: 'inherit' }}>{opt.label}</button>
                           ))}
                         </div>
                         <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -149,7 +149,7 @@ function SavingsTab({ showForm, setShowForm }) {
                           <button onClick={() => handleContribution(goal.id)} disabled={savingId === goal.id} style={{ background: goalAction === 'add' ? '#22c55e' : '#f43f5e', color: '#fff', border: 'none', borderRadius: 8, padding: '0.5rem 0.875rem', fontWeight: 700, cursor: 'pointer', opacity: savingId === goal.id ? 0.6 : 1 }}>
                             {savingId === goal.id ? '…' : goalAction === 'add' ? 'Add' : 'Remove'}
                           </button>
-                          <button onClick={() => { setActiveGoalId(null); setContribution(''); }} style={{ background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 8, padding: '0.5rem 0.75rem', cursor: 'pointer' }}>✕</button>
+                          <button onClick={() => { setActiveGoalId(null); setContribution(''); }} style={{ background: 'transparent', color: 'var(--ink-3)', border: '1px solid var(--border)', borderRadius: 8, padding: '0.5rem 0.75rem', cursor: 'pointer' }}>✕</button>
                         </div>
                       </div>
                     ) : (
@@ -203,7 +203,7 @@ function VacationsTab({ showForm, setShowForm }) {
     closeForm();
   }
 
-  const S = { inp: { background: '#0f172a', border: '1px solid #334155', borderRadius: 10, color: '#f1f5f9', padding: '0.625rem 0.875rem', fontSize: '0.9rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' } };
+  const S = { inp: { background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--ink-1)', padding: '0.625rem 0.875rem', fontSize: '0.9rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' } };
 
   return (
     <div>
@@ -211,7 +211,7 @@ function VacationsTab({ showForm, setShowForm }) {
         <div className="card" style={{ marginBottom: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
           <input type="text"   placeholder="Destination (e.g. Tokyo)" value={form.destination}  onChange={(e) => setF('destination', e.target.value)}  style={S.inp} />
           <input type="date"                                           value={form.trip_date}    onChange={(e) => setF('trip_date', e.target.value)}    style={S.inp} />
-          <input type="number" placeholder="Total budget ($)"         value={form.total_budget} onChange={(e) => setF('total_budget', e.target.value)} style={{ ...S.inp, fontSize: '1.25rem', fontWeight: 800, color: '#818cf8' }} />
+          <input type="number" placeholder="Total budget ($)"         value={form.total_budget} onChange={(e) => setF('total_budget', e.target.value)} style={{ ...S.inp, fontSize: '1.25rem', fontWeight: 800 }} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
             {[['flight_budget','✈️'],['hotel_budget','🏨'],['misc_budget','🎒']].map(([k, ic]) => (
               <input key={k} type="number" placeholder={`${ic} $0`} value={form[k]} onChange={(e) => setF(k, e.target.value)} style={{ ...S.inp, fontSize: '0.85rem', padding: '0.5rem' }} />
@@ -225,7 +225,7 @@ function VacationsTab({ showForm, setShowForm }) {
             <button onClick={handleSave} style={{ flex: 1, background: '#818cf8', color: '#fff', border: 'none', borderRadius: 10, padding: '0.75rem', fontWeight: 700, cursor: 'pointer' }}>
               {editItem ? 'Update Trip' : 'Create Trip'}
             </button>
-            <button onClick={closeForm} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 10, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
+            <button onClick={closeForm} style={{ flex: 1, background: 'transparent', color: 'var(--ink-3)', border: '1px solid var(--border)', borderRadius: 10, padding: '0.75rem', cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}
@@ -240,12 +240,12 @@ function VacationsTab({ showForm, setShowForm }) {
             const pct        = pace.total > 0 ? Math.min((pace.saved / pace.total) * 100, 100) : 0;
             const color      = pct >= 100 ? '#22c55e' : pct > 60 ? '#818cf8' : '#f59e0b';
             return (
-              <div key={v.id} className="card">
+              <div key={v.id} className="card" style={{ background: 'var(--bg-card)', border: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.625rem' }}>
                   <div>
-                    <p style={{ fontWeight: 800, color: '#f1f5f9', fontSize: '0.975rem' }}>✈️ {v.destination}</p>
-                    <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.15rem' }}>
-                      {format(parseISO(v.trip_date), 'MMMM d, yyyy')} · {pace.daysLeft} days away
+                    <p style={{ fontWeight: 800, color: 'var(--ink-1)', fontSize: '0.975rem' }}>✈️ {v.destination}</p>
+                    <p style={{ fontSize: '0.75rem', color: 'var(--ink-3)', marginTop: '0.15rem' }}>
+                      <span style={{ color: 'var(--ink-3)' }}>{format(parseISO(v.trip_date), 'MMMM d, yyyy')} · {pace.daysLeft} days away</span>
                     </p>
                   </div>
                   <div style={{ display: 'flex', gap: '0.375rem' }}>
@@ -255,17 +255,17 @@ function VacationsTab({ showForm, setShowForm }) {
                     </button>
                   </div>
                 </div>
-                <div style={{ background: '#0f172a', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: '0.375rem' }}>
+                <div style={{ background: 'var(--bg-inset)', borderRadius: 999, height: 7, overflow: 'hidden', marginBottom: '0.375rem' }}>
                   <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 999, transition: 'width .4s' }} />
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#64748b', marginBottom: '0.75rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: 'var(--ink-3)', marginBottom: '0.75rem' }}>
                   <span>{fmt(pace.saved)} saved of {fmt(pace.total)}</span>
                   <span style={{ color }}>{pct.toFixed(0)}%</span>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.375rem' }}>
                   {[['Per Day', pace.perDay], ['Per Week', pace.perWeek], ['Per Month', pace.perMonth]].map(([l, val]) => (
-                    <div key={l} style={{ background: '#0f172a', borderRadius: 8, padding: '0.4rem', textAlign: 'center' }}>
-                      <p style={{ fontSize: '0.62rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.15rem' }}>{l}</p>
+                    <div key={l} style={{ background: 'var(--bg-inset)', borderRadius: 8, padding: '0.4rem', textAlign: 'center', border: '1px solid var(--border)' }}>
+                      <p style={{ fontSize: '0.62rem', color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.15rem' }}>{l}</p>
                       <p style={{ fontWeight: 700, color: '#818cf8', fontSize: '0.82rem' }}>{fmt(val)}</p>
                     </div>
                   ))}
@@ -297,19 +297,19 @@ export default function GoalsHub() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
         <h1>Goals</h1>
         <button onClick={() => setShowForm((p) => !p)} style={{
-          background: showForm ? '#334155' : '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
+          background: showForm ? 'var(--ink-3)' : '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
           width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
         }}>
           <Plus size={20} strokeWidth={2.5} />
         </button>
       </div>
 
-      <div style={{ display: 'flex', background: '#1e293b', borderRadius: 10, padding: 3, marginBottom: '1.25rem' }}>
+      <div style={{ display: 'flex', background: 'var(--bg-inset)', borderRadius: 10, padding: 3, marginBottom: '1.25rem', border: '1px solid var(--border)' }}>
         {TABS.map((t) => (
           <button key={t} onClick={() => handleTabChange(t)} style={{
             flex: 1, padding: '0.55rem', borderRadius: 8, border: 'none', cursor: 'pointer',
-            background: active === t ? '#334155' : 'transparent',
-            color: active === t ? '#f1f5f9' : '#64748b',
+            background: active === t ? 'var(--bg-card)' : 'transparent',
+            color: active === t ? 'var(--ink-1)' : 'var(--ink-3)',
             fontWeight: 600, fontSize: '0.82rem', fontFamily: 'inherit'
           }}>
             {t === 'Savings' ? '🎯 Savings' : '✈️ Vacations'}
