@@ -58,16 +58,21 @@ export function useAccounts() {
   /**
    * Compute per-account balances.
    *
-   * account_total_balance    = starting_balance + income - expenses + transfers_in - transfers_out
-   * account_savings_balance  = sum of savings allocations (to_savings - from_savings) clamped ≥ 0
-   * account_available_balance = account_total_balance - account_savings_balance
+   * Legacy mode (savingsAllocationsPerAccount = null):
+   *   income account  → amount - savings_allocation
+   *   savings account → savings_allocation
+   *   savingsBreakdown[savings_account_id] += savings_allocation  ← correct source for breakdown
    *
-   * savingsAllocationsPerAccount: { [account_id]: number } — pass from useSavingsAllocations.computeSavingsPerAccount()
-   * Falls back to legacy transaction-based savings if allocations not provided.
+   * New allocations mode (savingsAllocationsPerAccount provided):
+   *   income account → full amount
+   *   savingsBreakdown sourced from allocations table
+   *
+   * Transfers affect totals only — never income/expense reports.
+   * available = total_balance - savings_balance
    */
   function computeAccountBalances(transactions, transfers, savingsAllocationsPerAccount = null) {
-    const balances          = {};
-    const savingsBreakdown  = {};
+    const balances           = {};
+    const savingsBreakdown   = {};
     const availableBreakdown = {};
 
     for (const a of accounts) {
@@ -76,36 +81,40 @@ export function useAccounts() {
       availableBreakdown[a.id] = 0;
     }
 
-    // Income / expense transactions
     for (const t of transactions) {
       if (!t.account_id || !balances.hasOwnProperty(t.account_id)) continue;
+
       if (t.type === 'income') {
-        balances[t.account_id] += Number(t.amount);
+        if (savingsAllocationsPerAccount) {
+          balances[t.account_id] += Number(t.amount);
+        } else {
+          // Legacy: spendable portion to source account, savings to savings_account_id
+          const spendable = Number(t.amount) - Number(t.savings_allocation || 0);
+          balances[t.account_id] += spendable;
+          if (t.savings_allocation && t.savings_account_id) {
+            if (balances.hasOwnProperty(t.savings_account_id)) {
+              balances[t.savings_account_id]         += Number(t.savings_allocation);
+              savingsBreakdown[t.savings_account_id] += Number(t.savings_allocation);
+            }
+          }
+        }
       } else if (t.type === 'expense') {
         balances[t.account_id] -= Number(t.amount);
       }
-      // Legacy transaction-level savings (ignored when allocations table is used)
-      if (!savingsAllocationsPerAccount && t.savings_allocation && t.savings_account_id) {
-        if (balances.hasOwnProperty(t.savings_account_id)) {
-          savingsBreakdown[t.savings_account_id] += Number(t.savings_allocation);
-        }
-      }
     }
 
-    // Transfers affect total balance only (never income/expense)
-    for (const tr of transfers) {
-      if (balances.hasOwnProperty(tr.from_account_id)) balances[tr.from_account_id] -= Number(tr.amount);
-      if (balances.hasOwnProperty(tr.to_account_id))   balances[tr.to_account_id]   += Number(tr.amount);
-    }
-
-    // Apply savings allocations
     if (savingsAllocationsPerAccount) {
       for (const id of Object.keys(balances)) {
         savingsBreakdown[id] = savingsAllocationsPerAccount[id] || 0;
       }
     }
 
-    // Compute available = total - savings (clamped so available >= 0 if total >= 0)
+    // Transfers: balance impact only
+    for (const tr of transfers) {
+      if (balances.hasOwnProperty(tr.from_account_id)) balances[tr.from_account_id] -= Number(tr.amount);
+      if (balances.hasOwnProperty(tr.to_account_id))   balances[tr.to_account_id]   += Number(tr.amount);
+    }
+
     for (const id of Object.keys(balances)) {
       availableBreakdown[id] = Math.max(0, balances[id] - savingsBreakdown[id]);
     }

@@ -4,6 +4,7 @@
  * Fix 1: Marking N/A → budget auto-redistributes to active categories
  *        in priority order → saves immediately to Supabase
  * Fix 2: Projection numbers have clear human labels
+ * Fix 3: Full light theme — no dark remnants
  */
 import { useState }       from 'react';
 import { getMonth, getYear, format } from 'date-fns';
@@ -27,58 +28,31 @@ import { predictMonthEnd }                                from '../lib/analytics
 
 // ── N/A persistence (localStorage) ───────────────────────────────────────
 const NA_KEY = 'flowtracker_na_categories';
-function loadNA()       { try { return JSON.parse(localStorage.getItem(NA_KEY) || '[]'); } catch { return []; } }
-function saveNA(list)   { try { localStorage.setItem(NA_KEY, JSON.stringify(list)); } catch {} }
+function loadNA()     { try { return JSON.parse(localStorage.getItem(NA_KEY) || '[]'); } catch { return []; } }
+function saveNA(list) { try { localStorage.setItem(NA_KEY, JSON.stringify(list)); } catch {} }
 
-// ── Redistribute freed budget to active categories by priority ────────────
-/**
- * When a category is marked N/A its budget limit is freed.
- * We distribute that freed amount to the remaining active (non-NA) categories,
- * starting with HIGH priority, then MEDIUM, then LOW — proportionally within
- * each tier based on their existing weight.
- *
- * Returns { [category]: newLimit } for ALL active categories.
- */
 function redistributeNA({ budgets, naCategories, priorityMap }) {
   const activeBudgets = budgets.filter(b => !naCategories.includes(b.category));
   const naBudgets     = budgets.filter(b =>  naCategories.includes(b.category));
-
   if (activeBudgets.length === 0) return {};
-
-  // Total freed budget from all N/A categories
   const freedAmount = naBudgets.reduce((s, b) => s + Number(b.amount_limit), 0);
-
   if (freedAmount <= 0) return {};
-
-  // Sort active by priority (high first)
   const priorityOrder = { high: 0, medium: 1, low: 2 };
   const sorted = [...activeBudgets].sort((a, b) => {
     const pa = priorityOrder[priorityMap[a.category] || 'medium'] ?? 1;
     const pb = priorityOrder[priorityMap[b.category] || 'medium'] ?? 1;
     return pa - pb;
   });
-
-  // Total existing limits of active categories (base for proportional distribution)
   const totalActiveLimit = activeBudgets.reduce((s, b) => s + Number(b.amount_limit), 0);
-
-  // Distribute freed amount proportionally to each active category
-  // (higher limit = gets more of the freed budget)
   const result = {};
   let distributed = 0;
-
   sorted.forEach((b, idx) => {
-    const isLast    = idx === sorted.length - 1;
-    const share     = totalActiveLimit > 0
-      ? (Number(b.amount_limit) / totalActiveLimit) * freedAmount
-      : freedAmount / sorted.length;
-    // Last category gets remainder to avoid floating point drift
-    const addition  = isLast
-      ? freedAmount - distributed
-      : Math.round(share * 100) / 100;
+    const isLast   = idx === sorted.length - 1;
+    const share    = totalActiveLimit > 0 ? (Number(b.amount_limit) / totalActiveLimit) * freedAmount : freedAmount / sorted.length;
+    const addition = isLast ? freedAmount - distributed : Math.round(share * 100) / 100;
     result[b.category] = Math.round((Number(b.amount_limit) + addition) * 100) / 100;
     distributed += addition;
   });
-
   return result;
 }
 
@@ -103,54 +77,33 @@ export default function Plan() {
 
   const fixedExpenses = monthly.filter(t => t.type === 'expense' && t.nature === 'fixed');
 
-  // ── N/A state ─────────────────────────────────────────────────────────
   const [naCategories,   setNaCategories]   = useState(() => loadNA());
   const [redistributing, setRedistributing] = useState(false);
-
   const isNA = (cat) => naCategories.includes(cat);
 
-  /**
-   * Toggle N/A for a category.
-   * If marking AS N/A → redistribute freed budget to active categories and save.
-   * If removing N/A  → no automatic rebalance (user can do it manually).
-   */
   async function toggleNA(cat) {
     const willBeNA = !isNA(cat);
-    const next     = willBeNA
-      ? [...naCategories, cat]
-      : naCategories.filter(c => c !== cat);
-
+    const next     = willBeNA ? [...naCategories, cat] : naCategories.filter(c => c !== cat);
     setNaCategories(next);
     saveNA(next);
-
     if (!willBeNA) {
       push(`${getCategoryMeta(cat).label} restored — run Auto-Rebalance to redistribute`, 'warning');
       return;
     }
-
-    // Marked as N/A → redistribute now
     setRedistributing(true);
-    const priorityMap  = getPriorityMap();
-    const newLimits    = redistributeNA({ budgets, naCategories: next, priorityMap });
-
+    const priorityMap = getPriorityMap();
+    const newLimits   = redistributeNA({ budgets, naCategories: next, priorityMap });
     if (Object.keys(newLimits).length === 0) {
       push(`${getCategoryMeta(cat).label} marked N/A`, 'warning');
       setRedistributing(false);
       return;
     }
-
-    // Save each adjusted limit to Supabase
     let count = 0;
     for (const [activeCat, newLimit] of Object.entries(newLimits)) {
       const original = budgets.find(b => b.category === activeCat)?.amount_limit;
-      if (newLimit !== original && newLimit > 0) {
-        await upsertBudget(activeCat, newLimit);
-        count++;
-      }
+      if (newLimit !== original && newLimit > 0) { await upsertBudget(activeCat, newLimit); count++; }
     }
-
     setRedistributing(false);
-
     const freed = budgets.find(b => b.category === cat)?.amount_limit || 0;
     push(
       count > 0
@@ -160,69 +113,55 @@ export default function Plan() {
     );
   }
 
-  // ── Other handlers ────────────────────────────────────────────────────
   const [showAdd,    setShowAdd]    = useState(false);
   const [showNA,     setShowNA]     = useState(false);
+  const [showFixed,  setShowFixed]  = useState(false);
   const [newCat,     setNewCat]     = useState('food');
   const [newLimit,   setNewLimit]   = useState('');
   const [editCat,    setEditCat]    = useState(null);
   const [limitInput, setLimitInput] = useState('');
   const [applying,   setApplying]   = useState(false);
   const [rebalLog,   setRebalLog]   = useState(null);
-  const [showFixed,  setShowFixed]  = useState(true);
+
+  const unbudgetedCats = EXPENSE_CATEGORIES.filter(c => !budgets.find(b => b.category === c.value));
 
   async function handleUpsert(category, limit) {
     const val = parseFloat(limit);
     if (!val || val <= 0) { push('Enter a valid amount', 'error'); return; }
-    await upsertBudget(category, val);
-    push('Budget saved');
-    setEditCat(null); setShowAdd(false); setNewLimit('');
+    try { await upsertBudget(category, val); push('Budget saved'); setEditCat(null); setShowAdd(false); setNewLimit(''); }
+    catch (e) { push(e.message, 'error'); }
   }
 
   async function handleDelete(category) {
-    const ok = await confirm({
-      title: 'Remove budget?',
-      message: `Remove the limit for ${getCategoryMeta(category).label}?`,
-      confirmLabel: 'Remove', danger: true,
-    });
+    const ok = await confirm({ title: 'Remove budget?', message: `Remove the ${getCategoryMeta(category).label} envelope?`, confirmLabel: 'Remove' });
     if (!ok) return;
-    await deleteBudget(category);
-    push('Budget removed', 'warning');
+    try { await deleteBudget(category); push('Budget removed', 'warning'); }
+    catch (e) { push(e.message, 'error'); }
   }
 
   async function handleRebalance() {
-    if (!canUse('rebalance')) return;
     if (budgets.length === 0) return;
     setApplying(true);
-
     const limits      = {};
     const priorityMap = getPriorityMap();
-    for (const b of budgets)
-      if (!isNA(b.category)) limits[b.category] = b.amount_limit;
-
+    for (const b of budgets) limits[b.category] = b.amount_limit;
     const result = rebalanceBudget({ limits, actuals, priorities: priorityMap });
     let count = 0;
     for (const [cat, newLim] of Object.entries(result.result)) {
-      if (newLim !== limits[cat] && newLim > 0) {
-        await upsertBudget(cat, newLim);
-        count++;
-      }
+      if (newLim !== limits[cat] && newLim > 0) { await upsertBudget(cat, newLim); count++; }
     }
-
-    setRebalLog({ message: result.message, changes: result.changes, count });
     setApplying(false);
-    push(count > 0 ? `⚖ ${count} budget${count > 1 ? 's' : ''} adjusted` : 'Already balanced', count > 0 ? 'success' : 'warning');
+    setRebalLog({ count, message: result.explanation || (count > 0 ? `${count} budget${count > 1 ? 's' : ''} adjusted by priority` : 'All budgets already balanced') });
   }
 
   async function applySmartBudget(limits) {
-    for (const [cat, limit] of Object.entries(limits))
-      if (limit > 0 && !isNA(cat)) await upsertBudget(cat, limit);
+    for (const [cat, lim] of Object.entries(limits)) {
+      if (lim > 0) await upsertBudget(cat, lim);
+    }
     push('Smart budgets applied ✓');
   }
 
   if (loading) return <PageLoader />;
-
-  const unbudgetedCats = EXPENSE_CATEGORIES.filter(c => !budgets.find(b => b.category === c.value));
 
   return (
     <div className="page">
@@ -236,47 +175,45 @@ export default function Plan() {
           <Plus size={20} strokeWidth={2.5} />
         </button>
       </div>
-      <p style={{ fontSize: '0.82rem', color: '#64748b', marginBottom: '1.25rem' }}>
+      <p style={{ fontSize: '0.82rem', color: 'rgba(26,26,24,0.45)', marginBottom: '1.25rem' }}>
         {format(now, 'MMMM yyyy')} — spending plan
       </p>
 
-      {/* FIX 2 — Projection with clear labels */}
+      {/* Projection */}
       {prediction && (
         <div style={{
           background: prediction.onTrack ? 'rgba(34,197,94,0.07)' : 'rgba(244,63,94,0.07)',
           border: `1px solid ${prediction.onTrack ? 'rgba(34,197,94,0.2)' : 'rgba(244,63,94,0.2)'}`,
           borderRadius: 14, padding: '0.875rem 1rem', marginBottom: '1rem',
         }}>
-          <p style={{ fontSize: '0.7rem', color: prediction.onTrack ? '#22c55e' : '#f43f5e', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
+          <p style={{ fontSize: '0.7rem', color: prediction.onTrack ? '#16a34a' : '#dc2626', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>
             Month-end projection
           </p>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
-            {/* Projected total spending */}
             <div style={{ background: prediction.onTrack ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 10, padding: '0.625rem' }}>
-              <p style={{ fontSize: '0.62rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+              <p style={{ fontSize: '0.62rem', color: 'rgba(26,26,24,0.45)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
                 Projected spending
               </p>
-              <p style={{ fontSize: '1.05rem', fontWeight: 800, color: prediction.onTrack ? '#22c55e' : '#f43f5e' }}>
+              <p style={{ fontSize: '1.05rem', fontWeight: 800, color: prediction.onTrack ? '#16a34a' : '#dc2626' }}>
                 {formatUSD(prediction.projectedExpense)}
               </p>
-              <p style={{ fontSize: '0.65rem', color: '#475569', marginTop: '0.15rem' }}>
+              <p style={{ fontSize: '0.65rem', color: 'rgba(26,26,24,0.45)', marginTop: '0.15rem' }}>
                 if you keep this pace all month
               </p>
             </div>
-            {/* Projected available remaining */}
             <div style={{ background: prediction.projectedBalance >= 0 ? 'rgba(129,140,248,0.08)' : 'rgba(244,63,94,0.08)', borderRadius: 10, padding: '0.625rem' }}>
-              <p style={{ fontSize: '0.62rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+              <p style={{ fontSize: '0.62rem', color: 'rgba(26,26,24,0.45)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
                 Available at month-end
               </p>
-              <p style={{ fontSize: '1.05rem', fontWeight: 800, color: prediction.projectedBalance >= 0 ? '#818cf8' : '#f43f5e' }}>
+              <p style={{ fontSize: '1.05rem', fontWeight: 800, color: prediction.projectedBalance >= 0 ? '#818cf8' : '#dc2626' }}>
                 {formatUSD(prediction.projectedBalance)}
               </p>
-              <p style={{ fontSize: '0.65rem', color: '#475569', marginTop: '0.15rem' }}>
+              <p style={{ fontSize: '0.65rem', color: 'rgba(26,26,24,0.45)', marginTop: '0.15rem' }}>
                 to spend freely — savings excluded
               </p>
             </div>
           </div>
-          <p style={{ fontSize: '0.68rem', color: prediction.onTrack ? '#22c55e' : '#f59e0b', marginTop: '0.5rem', fontWeight: 600 }}>
+          <p style={{ fontSize: '0.68rem', color: prediction.onTrack ? '#16a34a' : '#f59e0b', marginTop: '0.5rem', fontWeight: 600 }}>
             {prediction.onTrack
               ? `✓ On track — spending ${formatUSD(prediction.dailyRate)}/day`
               : `⚠ Spending ${formatUSD(prediction.dailyRate)}/day — consider slowing down`}
@@ -287,7 +224,7 @@ export default function Plan() {
       {/* Add budget form */}
       {showAdd && (
         <div className="card" style={{ marginBottom: '1rem' }}>
-          <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.875rem' }}>Add Budget Limit</p>
+          <p style={{ fontWeight: 700, fontSize: '0.9rem', marginBottom: '0.875rem', color: '#1A1A18' }}>Add Budget Limit</p>
           <select value={newCat} onChange={e => setNewCat(e.target.value)} style={{ marginBottom: '0.75rem' }}>
             {EXPENSE_CATEGORIES.filter(c => !isNA(c.value)).map(c => (
               <option key={c.value} value={c.value}>{c.icon} {c.label}</option>
@@ -316,11 +253,11 @@ export default function Plan() {
         </div>
       )}
 
-      {/* ── Budget list ── */}
-      <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
+      {/* Budget list label */}
+      <p style={{ fontSize: '0.68rem', color: 'rgba(26,26,24,0.4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
         Monthly Budgets
         {naCategories.length > 0 && (
-          <span style={{ marginLeft: '0.5rem', color: '#475569', fontWeight: 500, textTransform: 'none', fontSize: '0.65rem' }}>
+          <span style={{ marginLeft: '0.5rem', color: 'rgba(26,26,24,0.35)', fontWeight: 500, textTransform: 'none', fontSize: '0.65rem' }}>
             · {naCategories.length} N/A
           </span>
         )}
@@ -339,18 +276,22 @@ export default function Plan() {
           {statusList.map(b => {
             const meta = getCategoryMeta(b.category);
             const pct  = Math.min(Math.round((b.spent / b.amount_limit) * 100), 100);
-            const barColor = b.over ? '#f43f5e' : pct > 80 ? '#f59e0b' : '#22c55e';
+            const barColor = b.over ? '#dc2626' : pct > 80 ? '#f59e0b' : '#16a34a';
             const na   = isNA(b.category);
 
             return (
               <div key={b.category} className="card" style={{
                 marginBottom: 0,
-                borderColor: b.over && !na ? 'rgba(244,63,94,0.3)' : na ? 'rgba(51,65,85,0.4)' : undefined,
+                borderColor: b.over && !na ? 'rgba(220,38,38,0.3)' : na ? 'rgba(26,26,24,0.15)' : undefined,
                 opacity: na ? 0.55 : 1,
                 transition: 'opacity 0.2s',
               }}>
                 {b.over && !na && (
-                  <div style={{ background: 'rgba(244,63,94,0.1)', border: '1px solid rgba(244,63,94,0.25)', borderRadius: 8, padding: '0.35rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.78rem', color: '#f43f5e', fontWeight: 600 }}>
+                  <div style={{
+                    background: 'rgba(220,38,38,0.07)', border: '1px solid rgba(220,38,38,0.2)',
+                    borderRadius: 8, padding: '0.35rem 0.75rem', marginBottom: '0.75rem',
+                    fontSize: '0.78rem', color: '#dc2626', fontWeight: 600,
+                  }}>
                     ⚠ Over by {formatUSD(b.spent - b.amount_limit)}
                   </div>
                 )}
@@ -360,14 +301,19 @@ export default function Plan() {
                     <span style={{ fontSize: '1.2rem' }}>{meta.icon}</span>
                     <div>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}>
-                        <p style={{ fontWeight: 600, color: '#f1f5f9', fontSize: '0.9rem' }}>{meta.label}</p>
+                        {/* ← FIXED: was #f1f5f9 (white), now dark ink */}
+                        <p style={{ fontWeight: 600, color: '#1A1A18', fontSize: '0.9rem' }}>{meta.label}</p>
                         {na && (
-                          <span style={{ fontSize: '0.6rem', color: '#475569', fontWeight: 800, background: '#0f172a', border: '1px solid #334155', borderRadius: 4, padding: '1px 5px', letterSpacing: '0.04em' }}>
+                          <span style={{
+                            fontSize: '0.6rem', color: 'rgba(26,26,24,0.55)', fontWeight: 700,
+                            background: 'rgba(26,26,24,0.06)', border: '1px solid rgba(26,26,24,0.12)',
+                            borderRadius: 4, padding: '1px 5px', letterSpacing: '0.04em',
+                          }}>
                             N/A
                           </span>
                         )}
                       </div>
-                      <p style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                      <p style={{ fontSize: '0.72rem', color: 'rgba(26,26,24,0.45)' }}>
                         {na ? 'Excluded · budget redistributed' : `${formatUSD(b.spent)} of ${formatUSD(b.amount_limit)}`}
                       </p>
                     </div>
@@ -375,16 +321,15 @@ export default function Plan() {
 
                   {editCat !== b.category && (
                     <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                      {/* N/A toggle */}
                       <button
                         onClick={() => !redistributing && toggleNA(b.category)}
-                        title={na ? 'Remove N/A — restore to active' : 'Mark N/A — redistribute budget to active categories'}
+                        title={na ? 'Remove N/A — restore to active' : 'Mark N/A — redistribute budget'}
                         disabled={redistributing}
                         style={{
                           background: na ? 'rgba(129,140,248,0.12)' : 'transparent',
-                          border: `1px solid ${na ? 'rgba(129,140,248,0.3)' : '#334155'}`,
+                          border: `1px solid ${na ? 'rgba(129,140,248,0.3)' : 'rgba(26,26,24,0.15)'}`,
                           borderRadius: 7, padding: '3px 8px',
-                          color: na ? '#818cf8' : '#475569',
+                          color: na ? '#818cf8' : 'rgba(26,26,24,0.45)',
                           fontSize: '0.65rem', fontWeight: 700,
                           cursor: redistributing ? 'wait' : 'pointer',
                           display: 'flex', alignItems: 'center', gap: 3,
@@ -398,7 +343,7 @@ export default function Plan() {
                           <button className="btn-icon" onClick={() => { setEditCat(b.category); setLimitInput(String(b.amount_limit)); }}>
                             <Pencil size={13} />
                           </button>
-                          <button className="btn-icon" onClick={() => handleDelete(b.category)} style={{ color: '#64748b' }}>
+                          <button className="btn-icon" onClick={() => handleDelete(b.category)} style={{ color: 'rgba(26,26,24,0.4)' }}>
                             <Trash2 size={13} />
                           </button>
                         </>
@@ -409,10 +354,11 @@ export default function Plan() {
 
                 {!na && (
                   <>
-                    <div style={{ background: '#0f172a', borderRadius: 4, height: 5, overflow: 'hidden' }}>
+                    {/* ← FIXED: was #0f172a (dark), now light track */}
+                    <div style={{ background: 'rgba(26,26,24,0.06)', borderRadius: 4, height: 5, overflow: 'hidden' }}>
                       <div style={{ width: `${pct}%`, height: '100%', borderRadius: 4, background: barColor }} />
                     </div>
-                    <p style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.25rem', textAlign: 'right' }}>{pct}%</p>
+                    <p style={{ fontSize: '0.72rem', color: 'rgba(26,26,24,0.38)', marginTop: '0.25rem', textAlign: 'right' }}>{pct}%</p>
                   </>
                 )}
 
@@ -432,7 +378,7 @@ export default function Plan() {
         </div>
       )}
 
-      {/* ── N/A panel for unbudgeted categories ── */}
+      {/* Unbudgeted categories */}
       {unbudgetedCats.length > 0 && (
         <div style={{ marginBottom: '1rem' }}>
           <button onClick={() => setShowNA(p => !p)} style={{
@@ -440,24 +386,28 @@ export default function Plan() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             width: '100%', padding: '0.25rem 0', marginBottom: showNA ? '0.625rem' : 0,
           }}>
-            <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(26,26,24,0.4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Categories without budget
             </p>
-            {showNA ? <ChevronUp size={13} color="#64748b" /> : <ChevronDown size={13} color="#64748b" />}
+            {showNA ? <ChevronUp size={13} color="rgba(26,26,24,0.4)" /> : <ChevronDown size={13} color="rgba(26,26,24,0.4)" />}
           </button>
 
           {showNA && (
-            <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 14, padding: '0.875rem' }}>
-              <p style={{ fontSize: '0.75rem', color: '#64748b', lineHeight: 1.5, marginBottom: '0.75rem' }}>
-                Categories you don't use can be marked N/A. Their budget weight will be added to your active categories automatically.
+            /* ← FIXED: was #1e293b dark panel */
+            <div style={{ background: '#FFFFFF', border: '1px solid rgba(26,26,24,0.09)', borderRadius: 14, padding: '0.875rem' }}>
+              <p style={{ fontSize: '0.75rem', color: 'rgba(26,26,24,0.5)', lineHeight: 1.5, marginBottom: '0.75rem' }}>
+                Categories you don't use can be marked N/A. Their budget weight will be redistributed to active categories automatically.
               </p>
               {unbudgetedCats.map(c => (
-                <div key={c.value} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 0', borderBottom: '1px solid #0f172a' }}>
+                <div key={c.value} style={{
+                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  padding: '0.5rem 0', borderBottom: '1px solid rgba(26,26,24,0.07)',
+                }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <span style={{ fontSize: '1.1rem' }}>{c.icon}</span>
-                    <span style={{ fontSize: '0.875rem', color: isNA(c.value) ? '#475569' : '#94a3b8', fontWeight: 500 }}>{c.label}</span>
+                    <span style={{ fontSize: '0.875rem', color: '#1A1A18', fontWeight: 500 }}>{c.label}</span>
                   </div>
-                  <span style={{ fontSize: '0.72rem', color: '#334155', fontStyle: 'italic' }}>No budget set</span>
+                  <span style={{ fontSize: '0.72rem', color: 'rgba(26,26,24,0.35)', fontStyle: 'italic' }}>No budget set</span>
                 </div>
               ))}
             </div>
@@ -465,7 +415,7 @@ export default function Plan() {
         </div>
       )}
 
-      {/* ── Fixed Expenses ── */}
+      {/* Fixed Expenses */}
       {fixedExpenses.length > 0 && (
         <div style={{ marginBottom: '1rem' }}>
           <button onClick={() => setShowFixed(p => !p)} style={{
@@ -473,24 +423,25 @@ export default function Plan() {
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
             width: '100%', padding: '0.25rem 0', marginBottom: '0.625rem',
           }}>
-            <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+            <p style={{ fontSize: '0.68rem', color: 'rgba(26,26,24,0.4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
               Fixed Expenses ({fixedExpenses.length})
             </p>
-            {showFixed ? <ChevronUp size={13} color="#64748b" /> : <ChevronDown size={13} color="#64748b" />}
+            {showFixed ? <ChevronUp size={13} color="rgba(26,26,24,0.4)" /> : <ChevronDown size={13} color="rgba(26,26,24,0.4)" />}
           </button>
           {showFixed && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
               {fixedExpenses.map(t => (
+                /* ← FIXED: was #1e293b dark card */
                 <div key={t.id} style={{
-                  background: '#1e293b', border: '1px solid #334155',
+                  background: '#FFFFFF', border: '1px solid rgba(26,26,24,0.09)',
                   borderRadius: 12, padding: '0.75rem 1rem',
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 }}>
                   <div>
-                    <p style={{ fontSize: '0.875rem', color: '#f1f5f9', fontWeight: 600 }}>{t.description || t.category}</p>
-                    <p style={{ fontSize: '0.72rem', color: '#475569' }}>{t.date} · {t.category}</p>
+                    <p style={{ fontSize: '0.875rem', color: '#1A1A18', fontWeight: 600 }}>{t.description || t.category}</p>
+                    <p style={{ fontSize: '0.72rem', color: 'rgba(26,26,24,0.45)' }}>{t.date} · {t.category}</p>
                   </div>
-                  <p style={{ fontWeight: 800, color: '#f43f5e', fontSize: '0.9rem' }}>-{formatUSD(t.amount)}</p>
+                  <p style={{ fontWeight: 800, color: '#dc2626', fontSize: '0.9rem' }}>-{formatUSD(t.amount)}</p>
                 </div>
               ))}
             </div>
@@ -498,8 +449,8 @@ export default function Plan() {
         </div>
       )}
 
-      {/* ── Smart Tools ── */}
-      <p style={{ fontSize: '0.68rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.625rem', marginTop: '0.5rem' }}>
+      {/* Smart Tools */}
+      <p style={{ fontSize: '0.68rem', color: 'rgba(26,26,24,0.4)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.625rem', marginTop: '0.5rem' }}>
         Smart Tools
       </p>
 
@@ -526,12 +477,12 @@ export default function Plan() {
               borderRadius: 12, padding: '0.875rem', marginBottom: '0.75rem',
             }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                <p style={{ fontSize: '0.8rem', color: rebalLog.count > 0 ? '#f59e0b' : '#22c55e', fontWeight: 700 }}>
+                <p style={{ fontSize: '0.8rem', color: rebalLog.count > 0 ? '#f59e0b' : '#16a34a', fontWeight: 700 }}>
                   {rebalLog.count > 0 ? `${rebalLog.count} budget${rebalLog.count > 1 ? 's' : ''} adjusted` : '✅ Already balanced'}
                 </p>
-                <button onClick={() => setRebalLog(null)} style={{ background: 'transparent', border: 'none', color: '#64748b', cursor: 'pointer' }}>✕</button>
+                <button onClick={() => setRebalLog(null)} style={{ background: 'transparent', border: 'none', color: 'rgba(26,26,24,0.4)', cursor: 'pointer' }}>✕</button>
               </div>
-              <p style={{ fontSize: '0.78rem', color: '#94a3b8' }}>{rebalLog.message}</p>
+              <p style={{ fontSize: '0.78rem', color: 'rgba(26,26,24,0.55)' }}>{rebalLog.message}</p>
             </div>
           )}
 
