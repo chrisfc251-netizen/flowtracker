@@ -4,16 +4,17 @@ export function EmptyState({ icon = '📭', title, subtitle, action, onAction })
     <div style={{
       textAlign: 'center',
       padding: '2.5rem 1.5rem',
-      background: '#1e293b',
-      border: '1px dashed #334155',
+      background: 'var(--bg-card)',
+      border: '1px dashed var(--border)',
       borderRadius: 16,
+      boxShadow: 'var(--shadow-card)',
     }}>
       <div style={{ fontSize: '2.25rem', marginBottom: '0.75rem' }}>{icon}</div>
-      <p style={{ fontWeight: 700, color: '#f1f5f9', marginBottom: '0.35rem', fontSize: '0.95rem' }}>
+      <p style={{ fontWeight: 700, color: 'var(--ink-1)', marginBottom: '0.35rem', fontSize: '0.95rem' }}>
         {title}
       </p>
       {subtitle && (
-        <p style={{ fontSize: '0.825rem', color: '#475569', lineHeight: 1.6, marginBottom: action ? '1.125rem' : 0 }}>
+        <p style={{ fontSize: '0.825rem', color: 'var(--ink-3)', lineHeight: 1.6, marginBottom: action ? '1.125rem' : 0 }}>
           {subtitle}
         </p>
       )}
@@ -40,7 +41,7 @@ export function SkeletonCard({ height = 80, style = {} }) {
   return (
     <div style={{
       height, borderRadius: 14,
-      background: 'linear-gradient(90deg, #1e293b 25%, #253347 50%, #1e293b 75%)',
+      background: 'linear-gradient(90deg, var(--bg-inset) 25%, var(--bg-card) 50%, var(--bg-inset) 75%)',
       backgroundSize: '200% 100%',
       animation: 'skeleton-shimmer 1.5s infinite',
       ...style,
