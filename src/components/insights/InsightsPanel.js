@@ -62,7 +62,7 @@ export function InsightsPanel({ transactions, goals, budgets }) {
 
         {/* Decision summary */}
         {(decisions.positives.length > 0 || decisions.negatives.length > 0) && (
-          <div style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 10, padding: '0.875rem' }}>
+          <div style={{ background: '#ffffff', border: '1px solid #334155', borderRadius: 10, padding: '0.875rem' }}>
             <p style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.625rem' }}>
               Decision Reflection
             </p>

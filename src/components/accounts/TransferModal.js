@@ -1,3 +1,9 @@
+/**
+ * TransferModal.js — v2
+ * - Accepts presetFromId to pre-select the from account
+ * - Uses availableBreakdown (not total balance) to check transfer feasibility
+ * - Transfer affects account balances only, never income/expense
+ */
 import { useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 
@@ -5,17 +11,21 @@ function formatUSD(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n || 0);
 }
 
-export function TransferModal({ accounts, balances, onSave, onClose }) {
-  // Default: first account as From, second as To
-  const [fromId, setFromId] = useState(accounts[0]?.id || '');
-  const [toId,   setToId]   = useState(accounts.length > 1 ? accounts[1]?.id : accounts[0]?.id || '');
+export function TransferModal({ accounts, balances, presetFromId, onSave, onClose }) {
+  const defaultFrom = presetFromId
+    ? presetFromId
+    : (accounts[0]?.id || '');
+
+  const defaultTo = accounts.find((a) => a.id !== defaultFrom)?.id || '';
+
+  const [fromId, setFromId] = useState(defaultFrom);
+  const [toId,   setToId]   = useState(defaultTo);
   const [amount, setAmount] = useState('');
   const [date,   setDate]   = useState(new Date().toISOString().slice(0, 10));
   const [note,   setNote]   = useState('');
   const [saving, setSaving] = useState(false);
   const [error,  setError]  = useState('');
 
-  // Always derive account objects from current state — never cache them
   const fromAcc  = accounts.find((a) => a.id === fromId);
   const toAcc    = accounts.find((a) => a.id === toId);
   const fromBal  = balances[fromId] || 0;
@@ -27,22 +37,16 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
   function handleFromChange(newFromId) {
     setFromId(newFromId);
     setError('');
-    // If To is now the same as From, pick a different account
     if (newFromId === toId) {
       const other = accounts.find((a) => a.id !== newFromId);
       if (other) setToId(other.id);
     }
   }
 
-  function handleToChange(newToId) {
-    setToId(newToId);
-    setError('');
-  }
-
   async function handleSave() {
     if (!amount || amt <= 0)  { setError('Enter a valid amount'); return; }
     if (fromId === toId)       { setError('Select two different accounts'); return; }
-    if (willOver)              { setError(`Insufficient balance in ${fromAcc?.name} (${formatUSD(fromBal)})`); return; }
+    if (willOver)              { setError(`Insufficient available balance in ${fromAcc?.name} (${formatUSD(fromBal)})`); return; }
     setSaving(true);
     const { error: err } = await onSave({ from_account_id: fromId, to_account_id: toId, amount: amt, date, note });
     setSaving(false);
@@ -60,18 +64,18 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
           <button onClick={onClose} style={{ background: '#334155', border: 'none', borderRadius: 8, color: '#94a3b8', width: 30, height: 30, cursor: 'pointer', fontSize: 16 }}>✕</button>
         </div>
 
-        {/* Visual preview — derived directly from fromAcc / toAcc */}
+        {/* Visual preview */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem', marginBottom: '1.25rem' }}>
           <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '0.75rem', border: `1px solid ${fromAcc?.color || '#334155'}44` }}>
             <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, marginBottom: '0.25rem' }}>FROM</p>
             <p style={{ fontSize: '1.1rem' }}>{fromAcc?.icon} {fromAcc?.name || '—'}</p>
-            <p style={{ fontSize: '0.8rem', color: fromBal >= 0 ? '#22c55e' : '#f43f5e', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(fromBal)}</p>
+            <p style={{ fontSize: '0.8rem', color: fromBal >= 0 ? '#22c55e' : '#f43f5e', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(fromBal)} available</p>
           </div>
           <ArrowRight size={20} color="#64748b" style={{ flexShrink: 0 }} />
           <div style={{ flex: 1, background: '#0f172a', borderRadius: 10, padding: '0.75rem', border: `1px solid ${toAcc?.color || '#334155'}44` }}>
             <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, marginBottom: '0.25rem' }}>TO</p>
             <p style={{ fontSize: '1.1rem' }}>{toAcc?.icon} {toAcc?.name || '—'}</p>
-            <p style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(toBal)}</p>
+            <p style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 700, marginTop: '0.2rem' }}>{formatUSD(toBal)} available</p>
           </div>
         </div>
 
@@ -80,17 +84,17 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
           <label style={labelStyle}>From Account</label>
           <select value={fromId} onChange={(e) => handleFromChange(e.target.value)} style={inputStyle}>
             {accounts.map((a) => (
-              <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)})</option>
+              <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)} avail.)</option>
             ))}
           </select>
         </div>
 
-        {/* To account selector — excludes fromId */}
+        {/* To account selector */}
         <div style={{ marginBottom: '1rem' }}>
           <label style={labelStyle}>To Account</label>
-          <select value={toId} onChange={(e) => handleToChange(e.target.value)} style={inputStyle}>
+          <select value={toId} onChange={(e) => setToId(e.target.value)} style={inputStyle}>
             {accounts.filter((a) => a.id !== fromId).map((a) => (
-              <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)})</option>
+              <option key={a.id} value={a.id}>{a.icon} {a.name} ({formatUSD(balances[a.id] || 0)} avail.)</option>
             ))}
           </select>
         </div>
@@ -101,7 +105,11 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
           <input type="number" inputMode="decimal" placeholder="0.00" value={amount}
             onChange={(e) => { setAmount(e.target.value); setError(''); }}
             style={{ ...inputStyle, fontSize: '1.375rem', fontWeight: 800, textAlign: 'center', color: willOver ? '#f43f5e' : '#f1f5f9' }} />
-          {noBalance ? <p style={{ color: "#f43f5e", fontSize: "0.75rem", marginTop: "0.25rem" }}>⚠️ {fromAcc?.name} has no balance to transfer</p> : willOver && <p style={{ color: "#f43f5e", fontSize: "0.75rem", marginTop: "0.25rem" }}>⚠️ Exceeds available balance ({formatUSD(fromBal)})</p>}
+          {noBalance
+            ? <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ {fromAcc?.name} has no available balance to transfer</p>
+            : willOver && amt > 0
+              ? <p style={{ color: '#f43f5e', fontSize: '0.75rem', marginTop: '0.25rem' }}>⚠️ Exceeds available balance ({formatUSD(fromBal)})</p>
+              : null}
         </div>
 
         {/* Date */}
@@ -126,6 +134,10 @@ export function TransferModal({ accounts, balances, onSave, onClose }) {
         }}>
           {saving ? 'Transferring…' : `Transfer ${amt > 0 ? formatUSD(amt) : ''}`}
         </button>
+
+        <p style={{ fontSize: '0.68rem', color: '#334155', textAlign: 'center', marginTop: '0.625rem' }}>
+          Transfers affect account balances only — not income or expense reports.
+        </p>
       </div>
     </div>
   );

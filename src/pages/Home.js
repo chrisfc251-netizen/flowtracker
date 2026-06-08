@@ -1,10 +1,10 @@
 /**
- * Home.js — v3
- * Fix 2: Monthly context shows available balance (not income)
- *   Format: "Spent $323 — $401 free to spend — $970 in savings (protected)"
+ * Home.js — v4
+ * - Savings card is now tappable → shows per-account savings breakdown sheet
+ * - Uses useSavingsAllocations for account-level savings data
  */
 import { format, getMonth, getYear, subDays, differenceInDays } from 'date-fns';
-import { Plus, Eye, EyeOff, ChevronRight, Zap, Target, ShieldCheck } from 'lucide-react';
+import { Plus, Eye, EyeOff, ChevronRight, Zap, Target, X } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useNavigate }      from 'react-router-dom';
 
@@ -13,6 +13,7 @@ import { useSavingsGoals }    from '../hooks/useSavingsGoals';
 import { useBudgets }         from '../hooks/useBudgets';
 import { useAccounts }        from '../hooks/useAccounts';
 import { useTransfers }       from '../hooks/useTransfers';
+import { useSavingsAllocations } from '../hooks/useSavingsAllocations';
 import { useUserPreferences } from '../hooks/useUserPreferences';
 import { useToast }           from '../components/ui/Toast';
 import { useConfirm }         from '../components/ui/ConfirmModal';
@@ -44,8 +45,67 @@ function paceLabel(d) {
   return `${d}d`;
 }
 
+// ── Savings Breakdown Sheet ───────────────────────────────────────────────
+function SavingsBreakdownSheet({ accounts, savingsPerAccount, totalSavings, onClose, onNavigateAccounts }) {
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.75)', zIndex: 500, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}
+      onClick={(e) => e.target === e.currentTarget && onClose()}>
+      <div style={{ background: '#1e293b', borderRadius: '20px 20px 0 0', border: '1px solid #334155', width: '100%', maxWidth: 600, padding: '1.5rem 1.25rem 2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+          <div>
+            <p style={{ fontSize: '0.68rem', color: '#818cf8', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '0.2rem' }}>Savings Breakdown</p>
+            <p style={{ fontSize: '1.5rem', fontWeight: 800, color: '#f1f5f9' }}>{fmt(totalSavings)}</p>
+          </div>
+          <button onClick={onClose} style={{ background: '#334155', border: 'none', borderRadius: 8, color: '#94a3b8', width: 30, height: 30, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <X size={15} />
+          </button>
+        </div>
+
+        {accounts.length === 0 ? (
+          <p style={{ color: '#475569', fontSize: '0.875rem', textAlign: 'center', padding: '1.5rem' }}>No accounts set up yet.</p>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginBottom: '1.25rem' }}>
+            {accounts.map((a) => {
+              const sav = savingsPerAccount[a.id] || 0;
+              const pct = totalSavings > 0 ? (sav / totalSavings) * 100 : 0;
+              return (
+                <div key={a.id} style={{ background: '#0f172a', borderRadius: 12, padding: '0.875rem 1rem', border: `1px solid ${a.color}22` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: sav > 0 ? '0.5rem' : 0 }}>
+                    <span style={{ fontSize: '1.2rem' }}>{a.icon}</span>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.875rem' }}>{a.name}</p>
+                      <p style={{ fontSize: '0.7rem', color: a.color, fontWeight: 600, textTransform: 'capitalize' }}>{a.type}</p>
+                    </div>
+                    <p style={{ fontWeight: 800, color: sav > 0 ? '#818cf8' : '#334155', fontSize: '0.9375rem' }}>{fmt(sav)}</p>
+                  </div>
+                  {sav > 0 && (
+                    <div style={{ background: '#1e293b', borderRadius: 4, height: 4, overflow: 'hidden' }}>
+                      <div style={{ width: `${pct}%`, height: '100%', background: a.color, borderRadius: 4 }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <button onClick={() => { onClose(); onNavigateAccounts(); }} style={{
+          background: 'rgba(129,140,248,.1)', color: '#818cf8', border: '1px solid rgba(129,140,248,.25)',
+          borderRadius: 10, padding: '0.75rem', fontWeight: 700, fontSize: '0.875rem',
+          cursor: 'pointer', width: '100%', fontFamily: 'inherit',
+        }}>
+          Edit Savings by Account →
+        </button>
+        <p style={{ fontSize: '0.65rem', color: '#334155', textAlign: 'center', marginTop: '0.5rem' }}>
+          Savings allocations never affect income or expense reports.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ── SECTION 1: Financial State ────────────────────────────────────────────
-function FinancialState({ totalBalance, availableBalance, totalSavings, ghostMode, onToggleGhost }) {
+function FinancialState({ totalBalance, availableBalance, totalSavings, ghostMode, onToggleGhost, onSavingsTap }) {
   const displayedTotal  = ghostMode ? availableBalance : totalBalance;
   const balancePositive = displayedTotal >= 0;
 
@@ -112,11 +172,17 @@ function FinancialState({ totalBalance, availableBalance, totalSavings, ghostMod
             <p style={{ fontSize: '0.65rem', color: '#1e293b', fontWeight: 700 }}>Hidden</p>
           </div>
         ) : (
-          <div style={{ background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.18)', borderRadius: 12, padding: '0.875rem' }}>
-            <p style={{ fontSize: '0.62rem', color: '#818cf8', fontWeight: 700, letterSpacing: '0.07em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>Savings</p>
+          <button onClick={onSavingsTap} style={{
+            background: 'rgba(99,102,241,0.09)', border: '1px solid rgba(99,102,241,0.22)',
+            borderRadius: 12, padding: '0.875rem', textAlign: 'left', cursor: 'pointer',
+            width: '100%', fontFamily: 'inherit', display: 'block',
+          }}>
+            <p style={{ fontSize: '0.62rem', color: '#818cf8', fontWeight: 700, letterSpacing: '0.07em', marginBottom: '0.3rem', textTransform: 'uppercase', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+              Savings <span style={{ fontSize: '0.6rem', opacity: 0.7 }}>▾</span>
+            </p>
             <p style={{ fontSize: '1.2rem', fontWeight: 800, color: '#f1f5f9', marginBottom: '0.2rem' }}>{fmt(totalSavings)}</p>
-            <p style={{ fontSize: '0.65rem', color: '#475569', lineHeight: 1.4 }}>Set aside — not counted as spendable</p>
-          </div>
+            <p style={{ fontSize: '0.65rem', color: '#475569', lineHeight: 1.4 }}>Tap to see by account</p>
+          </button>
         )}
       </div>
     </div>
@@ -124,8 +190,6 @@ function FinancialState({ totalBalance, availableBalance, totalSavings, ghostMod
 }
 
 // ── SECTION 2: Monthly Context ────────────────────────────────────────────
-// availableBalance comes from computeBalanceSplit (all-time) — same number
-// shown in the hero card. This keeps both cards perfectly consistent.
 function MonthlyContext({ transactions, availableBalance }) {
   const now         = new Date();
   const [y, m]      = [getYear(now), getMonth(now)];
@@ -176,9 +240,7 @@ function MonthlyContext({ transactions, availableBalance }) {
 
       {income > 0 && (
         <>
-          {/* Two-stat row: Spent of Available */}
           <div style={{ marginBottom: '0.875rem' }}>
-            {/* Main statement */}
             <div style={{
               background: '#0f172a', borderRadius: 12,
               padding: '0.875rem 1rem', marginBottom: '0.5rem',
@@ -202,7 +264,6 @@ function MonthlyContext({ transactions, availableBalance }) {
               </div>
             </div>
 
-            {/* Days remaining sub-label */}
             <p style={{ fontSize: '0.72rem', color: '#334155', textAlign: 'center' }}>
               {daysLeft} days left in {format(now, 'MMMM')}
               {savingsThisMonth > 0 && (
@@ -213,7 +274,6 @@ function MonthlyContext({ transactions, availableBalance }) {
             </p>
           </div>
 
-          {/* Pace bar */}
           <div style={{ marginBottom: fixed.length > 0 ? '0.875rem' : 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
               <span style={{ fontSize: '0.7rem', color: '#475569' }}>Spending pace</span>
@@ -447,16 +507,22 @@ export default function Home() {
   const { budgets }                      = useBudgets();
   const { accounts, computeAccountBalances } = useAccounts();
   const { transfers }                    = useTransfers();
+  const { computeSavingsPerAccount }     = useSavingsAllocations();
   const { prefs, updatePref }            = useUserPreferences();
   const { push }                         = useToast();
   const { confirm, ConfirmModal }        = useConfirm();
 
-  const [showForm, setShowForm] = useState(false);
-  const [editing,  setEditing]  = useState(null);
+  const [showForm,           setShowForm]           = useState(false);
+  const [editing,            setEditing]            = useState(null);
+  const [showSavingsSheet,   setShowSavingsSheet]   = useState(false);
 
   const { totalBalance, availableBalance, totalSavings } = computeBalanceSplit(transactions);
   const now = new Date();
   const budgetStatus = computeBudgetStatus(filterByMonth(transactions, getYear(now), getMonth(now)), budgets);
+
+  // Per-account savings for breakdown sheet
+  const accountIds = accounts.map((a) => a.id);
+  const savingsPerAccount = computeSavingsPerAccount(accountIds);
 
   async function handleDelete(id) {
     const ok = await confirm({ title: 'Delete transaction?', message: 'This cannot be undone.', confirmLabel: 'Delete' });
@@ -497,6 +563,7 @@ export default function Home() {
         totalSavings={totalSavings}
         ghostMode={prefs.ghost_mode}
         onToggleGhost={() => updatePref('ghost_mode', !prefs.ghost_mode)}
+        onSavingsTap={() => setShowSavingsSheet(true)}
       />
       <MonthlyContext transactions={transactions} availableBalance={availableBalance} />
       <GoalsPreview goals={goals} loading={goalsLoading} onNavigate={() => navigate('/goals')} />
@@ -526,6 +593,17 @@ export default function Home() {
           accounts={accounts}
         />
       )}
+
+      {showSavingsSheet && (
+        <SavingsBreakdownSheet
+          accounts={accounts}
+          savingsPerAccount={savingsPerAccount}
+          totalSavings={totalSavings}
+          onClose={() => setShowSavingsSheet(false)}
+          onNavigateAccounts={() => navigate('/more/accounts')}
+        />
+      )}
+
       <ConfirmModal />
     </div>
   );

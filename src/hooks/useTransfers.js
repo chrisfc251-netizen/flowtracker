@@ -13,8 +13,7 @@ export function useTransfers() {
       .from('transfers')
       .select('*, from_account:accounts!transfers_from_account_id_fkey(id,name,icon,color), to_account:accounts!transfers_to_account_id_fkey(id,name,icon,color)')
       .eq('user_id', user.id)
-      .order('date', { ascending: false })
-      .limit(50);
+      .order('date', { ascending: false });
     if (!error) setTransfers(data || []);
     setLoading(false);
   }, [user]);
@@ -41,5 +40,23 @@ export function useTransfers() {
     return { data: true };
   }, [user]);
 
-  return { transfers, loading, fetchTransfers, addTransfer, deleteTransfer };
+  // Returns per-account audit summary: { [account_id]: { totalIn, totalOut, net } }
+  function computeTransferAudit(accountIds) {
+    const result = {};
+    for (const id of accountIds) result[id] = { totalIn: 0, totalOut: 0, net: 0 };
+    for (const tr of transfers) {
+      const amt = Number(tr.amount);
+      if (result.hasOwnProperty(tr.from_account_id)) {
+        result[tr.from_account_id].totalOut += amt;
+        result[tr.from_account_id].net      -= amt;
+      }
+      if (result.hasOwnProperty(tr.to_account_id)) {
+        result[tr.to_account_id].totalIn += amt;
+        result[tr.to_account_id].net     += amt;
+      }
+    }
+    return result;
+  }
+
+  return { transfers, loading, fetchTransfers, addTransfer, deleteTransfer, computeTransferAudit };
 }
