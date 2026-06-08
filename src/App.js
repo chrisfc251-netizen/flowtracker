@@ -8,11 +8,13 @@ import { AccountSetupModal }           from './components/accounts/AccountSetupM
 import { OnboardingFlow }              from './components/onboarding/OnboardingFlow';
 
 // Pages
+// Pages
 import Home         from './pages/Home';
 import Transactions from './pages/Transactions';
 import Plan         from './pages/Plan';
 import Goals        from './pages/Goals';
 import Reports      from './pages/Reports';
+import Accounts     from './pages/Accounts';
 import Settings     from './pages/Settings';
 import AuthPage     from './pages/AuthPage';
 
@@ -70,8 +72,9 @@ function AppShell() {
           <Route path="/plan"         element={<Plan />}         />
           <Route path="/goals"        element={<Goals />}        />
           <Route path="/reports"      element={<Reports />}      />
+          <Route path="/accounts"     element={<Accounts />}     />
           <Route path="/settings"     element={<Settings />}     />
-          <Route path="*"             element={<Navigate to="/" replace />} />
+          <Route path="*"             element={<Navigate to="/" replace />} /> />} />
         </Routes>
         <BottomNav />
       </>
