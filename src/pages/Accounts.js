@@ -1,14 +1,12 @@
 import { useState } from 'react';
-import { Pencil, Trash2, ArrowLeftRight, Plus, ChevronDown, ChevronUp, PiggyBank } from 'lucide-react';
+import { Pencil, Trash2, ArrowLeftRight, Plus, ChevronDown, ChevronUp } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { useAccounts } from '../hooks/useAccounts';
 import { useTransfers } from '../hooks/useTransfers';
 import { useTransactions } from '../hooks/useTransactions';
-import { useSavingsAdjustments } from '../hooks/useSavingsAdjustments';
 import { useToast } from '../components/ui/Toast';
 import { AccountSetupModal } from '../components/accounts/AccountSetupModal';
 import { TransferModal } from '../components/accounts/TransferModal';
-import { SavingsAllocationEditor } from '../components/accounts/SavingsAllocationEditor';
 
 function formatUSD(n) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', minimumFractionDigits: 2 }).format(n || 0);
@@ -28,29 +26,33 @@ export default function Accounts() {
   const { transactions } = useTransactions();
   const { push } = useToast();
 
-  const [showAddModal,       setShowAddModal]       = useState(false);
-  const [showTransferModal,  setShowTransferModal]  = useState(false);
-  const [showSavingsEditor,  setShowSavingsEditor]  = useState(false);
-  const [editingAccount,     setEditingAccount]     = useState(null);
-  const [showHistory,        setShowHistory]        = useState(false);
+  const [showAddModal,      setShowAddModal]      = useState(false);
+  const [showTransferModal, setShowTransferModal] = useState(false);
+  const [editingAccount,    setEditingAccount]    = useState(null);
+  const [showHistory,       setShowHistory]       = useState(false);
 
-  // Edit form state
   const [editName,  setEditName]  = useState('');
   const [editType,  setEditType]  = useState('cash');
   const [editColor, setEditColor] = useState('#818cf8');
   const [editIcon,  setEditIcon]  = useState('💵');
 
-  const { adjustments: savingsAdjustments, addAdjustment } = useSavingsAdjustments();
-  const { balances, savingsBreakdown } = computeAccountBalances(transactions, transfers, savingsAdjustments);
-  const totalBalance  = Object.values(balances).reduce((s, v) => s + v, 0);
-  const totalSavings  = Object.values(savingsBreakdown).reduce((s, v) => s + v, 0);
+  const { balances, savingsBreakdown } = computeAccountBalances(transactions, transfers);
 
-  async function handleSavingsTransfer(payload) {
-    const { error } = await addAdjustment(payload);
-    if (error) { push(error.message, 'error'); return { error }; }
-    push('Savings transferred ✓');
-    return {};
+  // Per-account derived values following the accounting rules:
+  // total = balances[id] (already = spendable + savings routed here)
+  // savings = savingsBreakdown[id]
+  // available = total - savings
+  // Clamp to prevent display of impossible states
+  function getAccountValues(id) {
+    const total    = balances[id] || 0;
+    const savings  = Math.max(0, Math.min(savingsBreakdown[id] || 0, total));
+    const available = total - savings;
+    return { total, savings, available };
   }
+
+  const totalBalance = Object.values(balances).reduce((s, v) => s + v, 0);
+  const totalSavings = Object.values(savingsBreakdown).reduce((s, v) => s + v, 0);
+  const totalAvailable = totalBalance - totalSavings;
 
   async function handleAdd(payload) {
     const { error } = await addAccount(payload);
@@ -68,7 +70,7 @@ export default function Accounts() {
   }
 
   async function handleDelete(id, name) {
-    if (!window.confirm(`Archive account "${name}"? Its transaction history will be preserved.`)) return;
+    if (!window.confirm(`Archive account "${name}"?\nIts transaction history will be preserved.`)) return;
     const { error } = await deleteAccount(id);
     if (error) { push(error.message, 'error'); return; }
     push('Account archived', 'warning');
@@ -95,12 +97,12 @@ export default function Accounts() {
 
   if (loading) return (
     <div className="page" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '60vh' }}>
-      <p style={{ color: '#475569' }}>Loading accounts…</p>
+      <p style={{ color: 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>Loading accounts…</p>
     </div>
   );
 
   return (
-    <div className="page">
+    <div className="page" style={{ background: 'var(--bg)' }}>
 
       {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
@@ -108,116 +110,181 @@ export default function Accounts() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {accounts.length >= 2 && (
             <button onClick={() => setShowTransferModal(true)} style={{
-              background: 'rgba(129,140,248,.15)', color: '#818cf8', border: '1px solid rgba(129,140,248,.3)',
+              background: 'var(--bg-inset)', color: 'var(--ink-2)', border: '1px solid var(--border-strong)',
               borderRadius: 10, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
             }}>
               <ArrowLeftRight size={18} />
             </button>
           )}
-          {totalSavings > 0 && (
-            <button onClick={() => setShowSavingsEditor(true)} style={{
-              background: 'rgba(34,197,94,.12)', color: '#22c55e', border: '1px solid rgba(34,197,94,.25)',
-              borderRadius: 10, width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
-            }} title="Edit savings by account">
-              <PiggyBank size={18} />
-            </button>
-          )}
           <button onClick={() => setShowAddModal(true)} style={{
-            background: '#818cf8', color: '#fff', border: 'none', borderRadius: 12,
-            width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer'
+            background: 'var(--ink-1)', color: 'var(--bg)', border: 'none', borderRadius: 12,
+            width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer',
+            boxShadow: '0 2px 8px rgba(26,26,24,0.2)'
           }}>
             <Plus size={20} strokeWidth={2.5} />
           </button>
         </div>
       </div>
 
-      {/* Total across accounts */}
-      <div style={{ background: 'linear-gradient(135deg, rgba(99,102,241,.15), rgba(129,140,248,.08))', border: '1px solid rgba(99,102,241,.3)', borderRadius: 14, padding: '1rem 1.125rem', marginBottom: '1.25rem' }}>
-        <p style={{ fontSize: '0.7rem', color: '#818cf8', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.3rem' }}>Total Across All Accounts</p>
-        <p style={{ fontSize: '1.75rem', fontWeight: 800, color: '#f1f5f9' }}>{formatUSD(totalBalance)}</p>
-        <p style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '0.25rem' }}>{accounts.length} account{accounts.length !== 1 ? 's' : ''}</p>
+      {/* Global totals summary */}
+      <div style={{
+        background: 'var(--bg-card)', border: '1px solid var(--border)',
+        borderRadius: 14, padding: '1rem 1.125rem', marginBottom: '1.25rem',
+        boxShadow: 'var(--shadow-card)'
+      }}>
+        <p style={{ fontSize: '0.7rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.625rem', fontFamily: 'var(--font-sans)' }}>
+          Total Across All Accounts
+        </p>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+          <div>
+            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)', marginBottom: '0.2rem' }}>Total</p>
+            <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink-1)', fontFamily: 'var(--font-mono)' }}>{formatUSD(totalBalance)}</p>
+          </div>
+          <div>
+            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)', marginBottom: '0.2rem' }}>Savings</p>
+            <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--ink-2)', fontFamily: 'var(--font-mono)' }}>{formatUSD(totalSavings)}</p>
+          </div>
+          <div>
+            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)', marginBottom: '0.2rem' }}>Available</p>
+            <p style={{ fontSize: '1.1rem', fontWeight: 800, color: 'var(--accent-green)', fontFamily: 'var(--font-mono)' }}>{formatUSD(totalAvailable)}</p>
+          </div>
+        </div>
+        <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', marginTop: '0.5rem', fontFamily: 'var(--font-sans)' }}>
+          {accounts.length} account{accounts.length !== 1 ? 's' : ''} · available = total − savings
+        </p>
       </div>
 
       {/* Account list */}
       {accounts.length === 0 ? (
         <div style={{ textAlign: 'center', padding: '3rem 1.5rem' }}>
           <div style={{ fontSize: '3rem', marginBottom: '0.75rem' }}>🏦</div>
-          <p style={{ fontWeight: 700, color: '#f1f5f9', marginBottom: '0.375rem' }}>No accounts yet</p>
-          <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.25rem' }}>Add your first account to start tracking where your money lives.</p>
-          <button onClick={() => setShowAddModal(true)} style={{ background: '#818cf8', color: '#fff', border: 'none', borderRadius: 10, padding: '0.75rem 1.5rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <p style={{ fontWeight: 700, color: 'var(--ink-1)', marginBottom: '0.375rem', fontFamily: 'var(--font-sans)' }}>No accounts yet</p>
+          <p style={{ fontSize: '0.875rem', color: 'var(--ink-3)', marginBottom: '1.25rem', fontFamily: 'var(--font-sans)' }}>Add your first account to start tracking where your money lives.</p>
+          <button onClick={() => setShowAddModal(true)} style={{
+            background: 'var(--ink-1)', color: 'var(--bg)', border: 'none',
+            borderRadius: 10, padding: '0.75rem 1.5rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)'
+          }}>
             + Add Account
           </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.25rem' }}>
           {accounts.map((a) => {
-            const bal     = balances[a.id] || 0;
-            const savBal  = savingsBreakdown[a.id] || 0;
+            const { total, savings, available } = getAccountValues(a.id);
             const isEditing = editingAccount?.id === a.id;
 
             return (
-              <div key={a.id} style={{ background: '#1e293b', border: `1px solid ${a.color}33`, borderRadius: 14, overflow: 'hidden' }}>
-
+              <div key={a.id} style={{
+                background: 'var(--bg-card)',
+                border: `1px solid var(--border)`,
+                borderLeft: `4px solid ${a.color}`,
+                borderRadius: 14, overflow: 'hidden',
+                boxShadow: 'var(--shadow-card)'
+              }}>
                 {/* Account row */}
                 <div style={{ padding: '1rem', display: 'flex', alignItems: 'center', gap: '0.875rem' }}>
-                  <div style={{ width: 46, height: 46, borderRadius: 12, background: `${a.color}22`, border: `1px solid ${a.color}44`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.4rem', flexShrink: 0 }}>
+                  <div style={{
+                    width: 46, height: 46, borderRadius: 12,
+                    background: `${a.color}18`, border: `1px solid ${a.color}44`,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '1.4rem', flexShrink: 0
+                  }}>
                     {a.icon}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                       <div>
-                        <p style={{ fontWeight: 700, color: '#f1f5f9', fontSize: '0.9375rem' }}>{a.name}</p>
-                        <p style={{ fontSize: '0.75rem', color: a.color, fontWeight: 600, textTransform: 'capitalize' }}>{a.type}</p>
+                        <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontSize: '0.9375rem', fontFamily: 'var(--font-sans)' }}>{a.name}</p>
+                        <p style={{ fontSize: '0.75rem', color: a.color, fontWeight: 600, textTransform: 'capitalize', fontFamily: 'var(--font-sans)' }}>{a.type}</p>
                       </div>
+                      {/* Balance summary — 3-line right column */}
                       <div style={{ textAlign: 'right' }}>
-                        <p style={{ fontWeight: 800, color: bal >= 0 ? '#f1f5f9' : '#f43f5e', fontSize: '1.0625rem' }}>{formatUSD(bal)}</p>
-                        {savBal > 0 && (
-                          <p style={{ fontSize: '0.72rem', color: '#818cf8', fontWeight: 600 }}>🔒 {formatUSD(savBal)} saved</p>
+                        <p style={{ fontWeight: 800, color: 'var(--ink-1)', fontSize: '1.0625rem', fontFamily: 'var(--font-mono)' }}>{formatUSD(total)}</p>
+                        {savings > 0 && (
+                          <p style={{ fontSize: '0.72rem', color: 'var(--ink-3)', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+                            🔒 {formatUSD(savings)} saved
+                          </p>
                         )}
+                        <p style={{ fontSize: '0.72rem', color: 'var(--accent-green)', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>
+                          {formatUSD(available)} free
+                        </p>
                       </div>
                     </div>
                   </div>
                   <div style={{ display: 'flex', gap: '0.25rem', flexShrink: 0 }}>
-                    <button className="btn-icon" onClick={() => isEditing ? setEditingAccount(null) : startEdit(a)}>
-                      <Pencil size={14} />
+                    <button
+                      onClick={() => isEditing ? setEditingAccount(null) : startEdit(a)}
+                      style={{
+                        background: 'var(--bg-inset)', border: '1px solid var(--border)',
+                        borderRadius: 8, width: 32, height: 32,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', color: 'var(--ink-3)'
+                      }}
+                    >
+                      <Pencil size={13} />
                     </button>
-                    <button className="btn-icon" onClick={() => handleDelete(a.id, a.name)} style={{ color: '#64748b' }}>
-                      <Trash2 size={14} />
+                    <button
+                      onClick={() => handleDelete(a.id, a.name)}
+                      style={{
+                        background: 'rgba(244,63,94,0.07)', border: '1px solid rgba(244,63,94,0.18)',
+                        borderRadius: 8, width: 32, height: 32,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        cursor: 'pointer', color: 'var(--accent-red)'
+                      }}
+                    >
+                      <Trash2 size={13} />
                     </button>
                   </div>
                 </div>
 
-                {/* Inline edit form */}
+                {/* Edit form */}
                 {isEditing && (
-                  <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid #334155', paddingTop: '0.875rem', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)}
-                      style={{ background: '#0f172a', border: '1px solid #334155', borderRadius: 8, color: '#f1f5f9', padding: '0.625rem 0.875rem', fontSize: '0.9rem', width: '100%', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box' }} />
-
+                  <div style={{ padding: '0 1rem 1rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.875rem', paddingTop: '0.875rem' }}>
+                    {/* Type */}
                     <div style={{ display: 'flex', gap: '0.375rem' }}>
                       {ACCOUNT_TYPES.map((t) => (
                         <button key={t.value} onClick={() => setEditType(t.value)} style={{
-                          flex: 1, padding: '0.5rem', borderRadius: 8, border: `1px solid ${editType === t.value ? '#818cf8' : '#334155'}`,
-                          background: editType === t.value ? 'rgba(129,140,248,.15)' : 'transparent',
-                          color: editType === t.value ? '#818cf8' : '#64748b',
-                          fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit'
-                        }}>{t.label}</button>
+                          flex: 1, padding: '0.5rem 0.25rem', borderRadius: 8, cursor: 'pointer',
+                          background: editType === t.value ? 'var(--bg-inset)' : 'transparent',
+                          color: editType === t.value ? 'var(--ink-1)' : 'var(--ink-4)',
+                          fontWeight: editType === t.value ? 700 : 500,
+                          fontSize: '0.8rem', fontFamily: 'var(--font-sans)',
+                          border: `1px solid ${editType === t.value ? 'var(--border-strong)' : 'var(--border)'}`,
+                        }}>
+                          {t.label}
+                        </button>
                       ))}
                     </div>
 
+                    {/* Name */}
+                    <input
+                      type="text" value={editName} onChange={e => setEditName(e.target.value)}
+                      placeholder="Account name"
+                      style={{
+                        background: 'var(--bg-inset)', border: '1px solid var(--border-strong)',
+                        borderRadius: 8, color: 'var(--ink-1)', padding: '0.625rem 0.75rem',
+                        fontSize: '0.9rem', outline: 'none', fontFamily: 'var(--font-sans)', width: '100%', boxSizing: 'border-box'
+                      }}
+                    />
+
+                    {/* Icons */}
                     <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap' }}>
                       {PRESET_ICONS.map((ic) => (
                         <button key={ic} onClick={() => setEditIcon(ic)} style={{
-                          width: 36, height: 36, borderRadius: 8, border: `1px solid ${editIcon === ic ? '#818cf8' : '#334155'}`,
-                          background: editIcon === ic ? 'rgba(129,140,248,.15)' : '#0f172a', fontSize: '1.1rem', cursor: 'pointer'
+                          width: 36, height: 36, borderRadius: 8,
+                          border: `1px solid ${editIcon === ic ? 'var(--border-strong)' : 'var(--border)'}`,
+                          background: editIcon === ic ? 'var(--bg-inset)' : 'transparent',
+                          fontSize: '1.1rem', cursor: 'pointer'
                         }}>{ic}</button>
                       ))}
                     </div>
 
+                    {/* Colors */}
                     <div style={{ display: 'flex', gap: '0.375rem', flexWrap: 'wrap', alignItems: 'center' }}>
                       {PRESET_COLORS.map((c) => (
                         <button key={c} onClick={() => setEditColor(c)} style={{
                           width: 28, height: 28, borderRadius: '50%', border: 'none', cursor: 'pointer',
-                          background: c, boxShadow: editColor === c ? `0 0 0 2px #1e293b, 0 0 0 4px ${c}` : 'none'
+                          background: c, boxShadow: editColor === c ? `0 0 0 2px var(--bg), 0 0 0 4px ${c}` : 'none'
                         }} />
                       ))}
                       <input type="color" value={editColor} onChange={(e) => setEditColor(e.target.value)}
@@ -225,10 +292,18 @@ export default function Accounts() {
                     </div>
 
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={handleUpdate} style={{ flex: 1, background: '#818cf8', color: '#fff', border: 'none', borderRadius: 8, padding: '0.625rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <button onClick={handleUpdate} style={{
+                        flex: 1, background: 'var(--ink-1)', color: 'var(--bg)',
+                        border: 'none', borderRadius: 8, padding: '0.625rem',
+                        fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)'
+                      }}>
                         Save
                       </button>
-                      <button onClick={() => setEditingAccount(null)} style={{ flex: 1, background: 'transparent', color: '#64748b', border: '1px solid #334155', borderRadius: 8, padding: '0.625rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+                      <button onClick={() => setEditingAccount(null)} style={{
+                        flex: 1, background: 'transparent', color: 'var(--ink-3)',
+                        border: '1px solid var(--border-strong)', borderRadius: 8,
+                        padding: '0.625rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)'
+                      }}>
                         Cancel
                       </button>
                     </div>
@@ -240,25 +315,15 @@ export default function Accounts() {
         </div>
       )}
 
-      {/* Manage Savings button */}
-      {totalSavings > 0 && (
-        <button onClick={() => setShowSavingsEditor(true)} style={{
-          background: 'rgba(34,197,94,.08)', color: '#22c55e', border: '1px solid rgba(34,197,94,.2)',
-          borderRadius: 12, padding: '0.875rem', fontWeight: 700, fontSize: '0.9rem',
-          cursor: 'pointer', width: '100%', marginBottom: '0.625rem', fontFamily: 'inherit',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
-        }}>
-          <PiggyBank size={17} /> Edit Savings by Account
-        </button>
-      )}
-
       {/* Transfer button (bottom) */}
       {accounts.length >= 2 && (
         <button onClick={() => setShowTransferModal(true)} style={{
-          background: 'rgba(129,140,248,.1)', color: '#818cf8', border: '1px solid rgba(129,140,248,.25)',
+          background: 'var(--bg-card)', color: 'var(--ink-2)',
+          border: '1px solid var(--border-strong)',
           borderRadius: 12, padding: '0.875rem', fontWeight: 700, fontSize: '0.9rem',
-          cursor: 'pointer', width: '100%', marginBottom: '1.25rem', fontFamily: 'inherit',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem'
+          cursor: 'pointer', width: '100%', marginBottom: '1.25rem', fontFamily: 'var(--font-sans)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+          boxShadow: 'var(--shadow-card)'
         }}>
           <ArrowLeftRight size={17} /> Transfer Between Accounts
         </button>
@@ -270,37 +335,45 @@ export default function Accounts() {
           <button onClick={() => setShowHistory((p) => !p)} style={{
             background: 'transparent', border: 'none', cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-            width: '100%', padding: '0.25rem 0', marginBottom: '0.625rem', fontFamily: 'inherit'
+            width: '100%', padding: '0.25rem 0', marginBottom: '0.625rem', fontFamily: 'var(--font-sans)'
           }}>
-            <p style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+            <p style={{ fontSize: '0.7rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.07em', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>
               Transfer History ({transfers.length})
             </p>
-            {showHistory ? <ChevronUp size={14} color="#64748b" /> : <ChevronDown size={14} color="#64748b" />}
+            {showHistory ? <ChevronUp size={15} color="var(--ink-3)" /> : <ChevronDown size={15} color="var(--ink-3)" />}
           </button>
-
           {showHistory && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {transfers.map((tr) => (
-                <div key={tr.id} style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 12, padding: '0.875rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', marginBottom: '0.25rem' }}>
-                      <span style={{ fontSize: '0.9rem' }}>{tr.from_account?.icon}</span>
-                      <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{tr.from_account?.name}</span>
-                      <ArrowLeftRight size={12} color="#475569" />
-                      <span style={{ fontSize: '0.9rem' }}>{tr.to_account?.icon}</span>
-                      <span style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>{tr.to_account?.name}</span>
+              {transfers.slice().reverse().map((tr) => {
+                const fromAcc = accounts.find(a => a.id === tr.from_account_id);
+                const toAcc   = accounts.find(a => a.id === tr.to_account_id);
+                return (
+                  <div key={tr.id} style={{
+                    background: 'var(--bg-card)', border: '1px solid var(--border)',
+                    borderRadius: 12, padding: '0.75rem 0.875rem',
+                    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                    boxShadow: 'var(--shadow-card)'
+                  }}>
+                    <div>
+                      <p style={{ fontSize: '0.85rem', color: 'var(--ink-1)', fontWeight: 600, fontFamily: 'var(--font-sans)' }}>
+                        {fromAcc?.icon} {fromAcc?.name} → {toAcc?.icon} {toAcc?.name}
+                      </p>
+                      <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)' }}>
+                        {tr.date}{tr.note ? ` · ${tr.note}` : ''}
+                      </p>
                     </div>
-                    {tr.note && <p style={{ fontSize: '0.75rem', color: '#475569' }}>{tr.note}</p>}
-                    <p style={{ fontSize: '0.72rem', color: '#334155', marginTop: '0.15rem' }}>
-                      {format(parseISO(tr.date), 'MMM d, yyyy')}
-                    </p>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                      <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontFamily: 'var(--font-mono)' }}>{formatUSD(tr.amount)}</p>
+                      <button onClick={() => handleDeleteTransfer(tr.id)} style={{
+                        background: 'transparent', border: 'none', cursor: 'pointer',
+                        color: 'var(--accent-red)', padding: '0.25rem'
+                      }}>
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   </div>
-                  <p style={{ fontWeight: 800, color: '#818cf8', fontSize: '0.9375rem', flexShrink: 0 }}>{formatUSD(tr.amount)}</p>
-                  <button className="btn-icon" onClick={() => handleDeleteTransfer(tr.id)} style={{ color: '#334155', flexShrink: 0 }}>
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -308,7 +381,11 @@ export default function Accounts() {
 
       {/* Modals */}
       {showAddModal && (
-        <AccountSetupModal onComplete={handleAdd} onClose={() => setShowAddModal(false)} />
+        <AccountSetupModal
+          onComplete={handleAdd}
+          onClose={() => setShowAddModal(false)}
+          isFirstTime={false}
+        />
       )}
       {showTransferModal && (
         <TransferModal
@@ -316,14 +393,6 @@ export default function Accounts() {
           balances={balances}
           onSave={handleTransfer}
           onClose={() => setShowTransferModal(false)}
-        />
-      )}
-      {showSavingsEditor && (
-        <SavingsAllocationEditor
-          accounts={accounts}
-          savingsBreakdown={savingsBreakdown}
-          onSave={handleSavingsTransfer}
-          onClose={() => setShowSavingsEditor(false)}
         />
       )}
     </div>

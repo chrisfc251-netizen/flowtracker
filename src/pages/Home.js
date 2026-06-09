@@ -1,10 +1,9 @@
 /**
- * Home.js — v3
- * Fix 2: Monthly context shows available balance (not income)
- *   Format: "Spent $323 — $401 free to spend — $970 in savings (protected)"
+ * Home.js — v4 light theme restore
+ * All hardcoded dark hex values replaced with CSS custom property tokens.
  */
 import { format, getMonth, getYear, subDays, differenceInDays } from 'date-fns';
-import { Plus, Eye, EyeOff, ChevronRight, Zap, Target, ShieldCheck } from 'lucide-react';
+import { Plus, Eye, EyeOff, ChevronRight, Zap, Target } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useNavigate }      from 'react-router-dom';
 
@@ -53,37 +52,38 @@ function FinancialState({ totalBalance, availableBalance, totalSavings, ghostMod
     <div style={{
       background: 'var(--bg-card)',
       border: '1px solid var(--border)',
-      borderRadius: 'var(--radius)', padding: '1.375rem',
+      borderRadius: 20, padding: '1.375rem',
       marginBottom: '0.875rem', position: 'relative', overflow: 'hidden',
       boxShadow: 'var(--shadow-card)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-        <span style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+        <span style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>
           Your Money
         </span>
         <button onClick={onToggleGhost} style={{
-          background: ghostMode ? 'rgba(245,158,11,0.08)' : 'var(--bg-inset)',
-          border: `1px solid ${ghostMode ? 'rgba(245,158,11,0.3)' : 'var(--border)'}`,
+          background: ghostMode ? 'rgba(155,107,0,0.1)' : 'var(--bg-inset)',
+          border: `1px solid ${ghostMode ? 'rgba(155,107,0,0.3)' : 'var(--border-strong)'}`,
           borderRadius: 8, padding: '3px 10px',
-          color: ghostMode ? '#f59e0b' : 'var(--ink-3)',
+          color: ghostMode ? 'var(--accent-amber)' : 'var(--ink-3)',
           cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 5,
-          fontSize: '0.7rem', fontWeight: 700,
+          fontSize: '0.7rem', fontWeight: 700, fontFamily: 'var(--font-sans)',
         }}>
           {ghostMode ? <EyeOff size={11} /> : <Eye size={11} />}
           {ghostMode ? 'Savings hidden' : 'Show all'}
         </button>
       </div>
 
-      <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.2rem' }}>
+      <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', marginBottom: '0.2rem', fontFamily: 'var(--font-sans)' }}>
         {ghostMode ? 'AVAILABLE TO SPEND' : 'TOTAL BALANCE'}
       </p>
       <p style={{
         fontSize: '2.625rem', fontWeight: 900, letterSpacing: '-0.025em', lineHeight: 1,
-        color: balancePositive ? 'var(--ink-1)' : 'var(--accent-red)', marginBottom: '0.25rem',
+        color: balancePositive ? 'var(--ink-1)' : 'var(--accent-red)',
+        marginBottom: '0.25rem', fontFamily: 'var(--font-serif)',
       }}>
         {fmt(displayedTotal)}
       </p>
-      <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', marginBottom: '1rem', lineHeight: 1.4 }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', marginBottom: '1rem', lineHeight: 1.4, fontFamily: 'var(--font-sans)' }}>
         {ghostMode
           ? 'Money you can spend freely — savings excluded'
           : balancePositive
@@ -93,24 +93,25 @@ function FinancialState({ totalBalance, availableBalance, totalSavings, ghostMod
 
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.625rem' }}>
         <div style={{
-          background: 'rgba(34,197,94,0.06)', border: '1px solid rgba(34,197,94,0.18)',
+          background: 'var(--bg-inset)', border: '1px solid var(--border)',
+          borderLeft: `3px solid var(--accent-green)`,
           borderRadius: 12, padding: '0.875rem',
         }}>
-          <p style={{ fontSize: '0.62rem', color: 'var(--accent-green)', fontWeight: 700, letterSpacing: '0.07em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>Available</p>
-          <p style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink-1)', marginBottom: '0.2rem' }}>{fmt(availableBalance)}</p>
-          <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', lineHeight: 1.4 }}>Free to spend — savings not included</p>
+          <p style={{ fontSize: '0.62rem', color: 'var(--accent-green)', fontWeight: 700, letterSpacing: '0.07em', marginBottom: '0.3rem', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>Available</p>
+          <p style={{ fontSize: '1.2rem', fontWeight: 800, color: availableBalance >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', marginBottom: '0.2rem', fontFamily: 'var(--font-mono)' }}>{fmt(availableBalance)}</p>
+          <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', lineHeight: 1.4, fontFamily: 'var(--font-sans)' }}>Free to spend — savings not included</p>
         </div>
 
         {ghostMode ? (
           <div style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 12, padding: '0.875rem', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '0.35rem' }}>
-            <EyeOff size={16} color="var(--border)" />
-            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', fontWeight: 700 }}>Hidden</p>
+            <EyeOff size={16} color="var(--ink-4)" />
+            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', fontWeight: 700, fontFamily: 'var(--font-sans)' }}>Hidden</p>
           </div>
         ) : (
-          <div style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 12, padding: '0.875rem' }}>
-            <p style={{ fontSize: '0.62rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.07em', marginBottom: '0.3rem', textTransform: 'uppercase' }}>Savings</p>
-            <p style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink-1)', marginBottom: '0.2rem' }}>{fmt(totalSavings)}</p>
-            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', lineHeight: 1.4 }}>Set aside — not counted as spendable</p>
+          <div style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', borderLeft: '3px solid var(--ink-3)', borderRadius: 12, padding: '0.875rem' }}>
+            <p style={{ fontSize: '0.62rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.07em', marginBottom: '0.3rem', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>Savings</p>
+            <p style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink-2)', marginBottom: '0.2rem', fontFamily: 'var(--font-mono)' }}>{fmt(totalSavings)}</p>
+            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', lineHeight: 1.4, fontFamily: 'var(--font-sans)' }}>Set aside — not counted as spendable</p>
           </div>
         )}
       </div>
@@ -151,18 +152,19 @@ function MonthlyContext({ transactions, availableBalance }) {
   return (
     <div style={{
       background: 'var(--bg-card)', border: '1px solid var(--border)',
-      borderRadius: 'var(--radius)', padding: '1.125rem', marginBottom: '0.875rem',
+      borderRadius: 16, padding: '1.125rem', marginBottom: '0.875rem',
       boxShadow: 'var(--shadow-card)',
     }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.875rem' }}>
-        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>
           {format(now, 'MMMM')} at a glance
         </p>
         <span style={{
           fontSize: '0.68rem', fontWeight: 700, padding: '3px 9px', borderRadius: 20,
-          background: onTrack ? 'rgba(34,197,94,0.08)' : 'rgba(244,63,94,0.08)',
+          background: onTrack ? 'rgba(34,197,94,0.1)' : 'rgba(244,63,94,0.1)',
           color: onTrack ? 'var(--accent-green)' : 'var(--accent-red)',
-          border: `1px solid ${onTrack ? 'rgba(34,197,94,0.2)' : 'rgba(244,63,94,0.2)'}`,
+          border: `1px solid ${onTrack ? 'rgba(34,197,94,0.25)' : 'rgba(244,63,94,0.25)'}`,
+          fontFamily: 'var(--font-sans)',
         }}>
           {onTrack ? '✓ On track' : '⚠ Spending fast'}
         </span>
@@ -178,24 +180,24 @@ function MonthlyContext({ transactions, availableBalance }) {
               border: '1px solid var(--border)',
             }}>
               <div>
-                <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                <p style={{ fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem', fontFamily: 'var(--font-sans)' }}>
                   Spent this month
                 </p>
-                <p style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--accent-red)', letterSpacing: '-0.01em' }}>
+                <p style={{ fontSize: '1.25rem', fontWeight: 900, color: 'var(--accent-red)', letterSpacing: '-0.01em', fontFamily: 'var(--font-serif)' }}>
                   {fmt(expense)}
                 </p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem' }}>
+                <p style={{ fontSize: '0.68rem', color: 'var(--ink-4)', fontWeight: 700, letterSpacing: '0.06em', textTransform: 'uppercase', marginBottom: '0.25rem', fontFamily: 'var(--font-sans)' }}>
                   Available to spend
                 </p>
-                <p style={{ fontSize: '1.25rem', fontWeight: 900, color: availableBalance >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', letterSpacing: '-0.01em' }}>
+                <p style={{ fontSize: '1.25rem', fontWeight: 900, color: availableBalance >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', letterSpacing: '-0.01em', fontFamily: 'var(--font-serif)' }}>
                   {fmt(availableBalance)}
                 </p>
               </div>
             </div>
 
-            <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', textAlign: 'center' }}>
+            <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', textAlign: 'center', fontFamily: 'var(--font-sans)' }}>
               {daysLeft} days left in {format(now, 'MMMM')}
               {savingsThisMonth > 0 && (
                 <span style={{ color: 'var(--ink-3)', marginLeft: '0.5rem' }}>
@@ -207,15 +209,15 @@ function MonthlyContext({ transactions, availableBalance }) {
 
           <div style={{ marginBottom: fixed.length > 0 ? '0.875rem' : 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
-              <span style={{ fontSize: '0.7rem', color: 'var(--ink-4)' }}>Spending pace</span>
-              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: spentPct > expectedPct + 10 ? 'var(--accent-red)' : 'var(--ink-3)' }}>
+              <span style={{ fontSize: '0.7rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)' }}>Spending pace</span>
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, color: spentPct > expectedPct + 10 ? 'var(--accent-red)' : 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>
                 {spentPct}% of income used
               </span>
             </div>
             <div style={{ background: 'var(--bg-inset)', borderRadius: 4, height: 5, position: 'relative', overflow: 'hidden', border: '1px solid var(--border)' }}>
               <div style={{
                 position: 'absolute', left: `${expectedPct}%`, top: 0, bottom: 0,
-                width: 2, background: 'var(--border)', zIndex: 2,
+                width: 2, background: 'var(--border-strong)', zIndex: 2,
               }} />
               <div style={{
                 width: `${Math.min(spentPct, 100)}%`, height: '100%',
@@ -225,7 +227,7 @@ function MonthlyContext({ transactions, availableBalance }) {
                 borderRadius: 4,
               }} />
             </div>
-            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', marginTop: '0.25rem' }}>
+            <p style={{ fontSize: '0.65rem', color: 'var(--ink-4)', marginTop: '0.25rem', fontFamily: 'var(--font-sans)' }}>
               Day {dayOfMonth}/{daysInMonth} — at this pace: {fmt(projectedByMonthEnd)} total by month-end
             </p>
           </div>
@@ -234,13 +236,13 @@ function MonthlyContext({ transactions, availableBalance }) {
 
       {fixed.length > 0 && (
         <>
-          <p style={{ fontSize: '0.65rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: '0.375rem', textTransform: 'uppercase' }}>
+          <p style={{ fontSize: '0.65rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.06em', marginBottom: '0.375rem', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>
             Fixed bills this month
           </p>
           {fixed.map(t => (
             <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: '0.2rem' }}>
-              <span style={{ fontSize: '0.8rem', color: 'var(--ink-2)' }}>{t.description || t.category}</span>
-              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-red)' }}>-{fmt(t.amount)}</span>
+              <span style={{ fontSize: '0.8rem', color: 'var(--ink-3)', fontFamily: 'var(--font-sans)' }}>{t.description || t.category}</span>
+              <span style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>-{fmt(t.amount)}</span>
             </div>
           ))}
         </>
@@ -259,23 +261,23 @@ function GoalsPreview({ goals, loading, onNavigate }) {
   return (
     <div style={{ marginBottom: '0.875rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.625rem' }}>
-        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>
           Savings Goals
         </p>
         <button onClick={onNavigate} style={{
-          background: 'transparent', border: 'none', color: 'var(--accent-blue)',
+          background: 'transparent', border: 'none', color: 'var(--accent-green)',
           fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-          display: 'flex', alignItems: 'center', gap: 3,
+          display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-sans)',
         }}>
           All goals <ChevronRight size={13} />
         </button>
       </div>
 
       {active.length === 0 ? (
-        <div style={{ background: 'var(--bg-card)', border: '1px dashed var(--border)', borderRadius: 14, padding: '1.25rem', textAlign: 'center', boxShadow: 'var(--shadow-card)' }}>
-          <Target size={24} color="var(--border)" style={{ marginBottom: '0.5rem' }} />
-          <p style={{ color: 'var(--ink-3)', fontSize: '0.825rem', marginBottom: '0.5rem' }}>No active goals</p>
-          <button onClick={onNavigate} style={{ background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, padding: '5px 14px', color: 'var(--accent-blue)', fontSize: '0.775rem', fontWeight: 700, cursor: 'pointer' }}>
+        <div style={{ background: 'var(--bg-card)', border: '1px dashed var(--border-strong)', borderRadius: 14, padding: '1.25rem', textAlign: 'center', boxShadow: 'var(--shadow-card)' }}>
+          <Target size={24} color="var(--ink-4)" style={{ marginBottom: '0.5rem' }} />
+          <p style={{ color: 'var(--ink-3)', fontSize: '0.825rem', marginBottom: '0.5rem', fontFamily: 'var(--font-sans)' }}>No active goals</p>
+          <button onClick={onNavigate} style={{ background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 8, padding: '5px 14px', color: 'var(--accent-green)', fontSize: '0.775rem', fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
             + Create a goal
           </button>
         </div>
@@ -286,7 +288,7 @@ function GoalsPreview({ goals, loading, onNavigate }) {
             const target  = Number(g.target_amount  || 0);
             const pct     = target > 0 ? Math.min((current / target) * 100, 100) : 0;
             const pace    = estimatePace(g);
-            const color   = pct > 75 ? '#f59e0b' : 'var(--accent-blue)';
+            const color   = pct > 75 ? 'var(--accent-amber)' : 'var(--accent-green)';
 
             return (
               <div key={g.id} onClick={onNavigate} style={{
@@ -298,13 +300,13 @@ function GoalsPreview({ goals, loading, onNavigate }) {
                 <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, background: color, borderRadius: '14px 0 0 14px' }} />
                 <div style={{ paddingLeft: '0.625rem' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontSize: '0.875rem' }}>{g.name}</p>
-                    <span style={{ fontSize: '0.8rem', color: 'var(--ink-3)' }}>{fmt(current)} / {fmt(target)}</span>
+                    <p style={{ fontWeight: 700, color: 'var(--ink-1)', fontSize: '0.875rem', fontFamily: 'var(--font-sans)' }}>{g.name}</p>
+                    <span style={{ fontSize: '0.8rem', color: 'var(--ink-3)', fontFamily: 'var(--font-mono)' }}>{fmt(current)} / {fmt(target)}</span>
                   </div>
-                  <div style={{ background: 'var(--bg-inset)', borderRadius: 999, height: 6, overflow: 'hidden', marginBottom: '0.375rem' }}>
+                  <div style={{ background: 'var(--bg-inset)', borderRadius: 999, height: 6, overflow: 'hidden', marginBottom: '0.375rem', border: '1px solid var(--border)' }}>
                     <div style={{ width: `${pct}%`, height: '100%', background: color, borderRadius: 999 }} />
                   </div>
-                  <p style={{ fontSize: '0.7rem', color: 'var(--ink-4)' }}>
+                  <p style={{ fontSize: '0.7rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)' }}>
                     {Math.round(pct)}%
                     {pace?.hasData
                       ? ` · ${paceLabel(pace.daysLeft)} to go at ${fmt(pace.avgPerDay)}/day`
@@ -338,18 +340,18 @@ function AffordabilityChecker({ availableBalance, totalSavings }) {
   function reset() { setAmount(''); setResult(null); inputRef.current?.focus(); }
 
   const statusColor = result
-    ? result.canAfford ? 'var(--accent-green)' : result.touchesSavings ? '#f59e0b' : 'var(--accent-red)'
+    ? result.canAfford ? 'var(--accent-green)' : result.touchesSavings ? 'var(--accent-amber)' : 'var(--accent-red)'
     : null;
 
   return (
-    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 'var(--radius)', padding: '1.125rem', marginBottom: '0.875rem', boxShadow: 'var(--shadow-card)' }}>
+    <div style={{ background: 'var(--bg-card)', border: '1px solid var(--border)', borderRadius: 16, padding: '1.125rem', marginBottom: '0.875rem', boxShadow: 'var(--shadow-card)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-        <Zap size={13} color="#f59e0b" />
-        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>
+        <Zap size={13} color="var(--accent-amber)" />
+        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>
           Can I Afford It?
         </p>
       </div>
-      <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', marginBottom: '0.75rem' }}>
+      <p style={{ fontSize: '0.72rem', color: 'var(--ink-4)', marginBottom: '0.75rem', fontFamily: 'var(--font-sans)' }}>
         Checks against your available balance of {fmt(availableBalance)}
       </p>
 
@@ -362,21 +364,21 @@ function AffordabilityChecker({ availableBalance, totalSavings }) {
             value={amount}
             onChange={e => setAmount(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && check()}
-            style={{ flex: 1, background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 10, color: 'var(--ink-1)', padding: '0.625rem 0.875rem', fontSize: '0.9rem', outline: 'none', fontFamily: 'inherit' }}
+            style={{ flex: 1, background: 'var(--bg-inset)', border: '1px solid var(--border-strong)', borderRadius: 10, color: 'var(--ink-1)', padding: '0.625rem 0.875rem', fontSize: '0.9rem', outline: 'none', fontFamily: 'var(--font-sans)' }}
           />
-          <button onClick={check} disabled={!amount} style={{ background: amount ? 'var(--accent-blue)' : 'var(--bg-inset)', color: amount ? '#fff' : 'var(--ink-4)', border: 'none', borderRadius: 10, padding: '0.625rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: amount ? 'pointer' : 'default' }}>
+          <button onClick={check} disabled={!amount} style={{ background: amount ? 'var(--ink-1)' : 'var(--bg-inset)', color: amount ? 'var(--bg)' : 'var(--ink-4)', border: 'none', borderRadius: 10, padding: '0.625rem 1rem', fontWeight: 700, fontSize: '0.875rem', cursor: amount ? 'pointer' : 'default', fontFamily: 'var(--font-sans)' }}>
             Check
           </button>
         </div>
       ) : (
         <>
-          <div style={{ background: `${statusColor}10`, border: `1px solid ${statusColor}30`, borderRadius: 12, padding: '0.875rem', marginBottom: '0.625rem' }}>
+          <div style={{ background: 'var(--bg-inset)', border: '1px solid var(--border)', borderRadius: 12, padding: '0.875rem', marginBottom: '0.625rem' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <div>
-                <p style={{ fontSize: '1rem', fontWeight: 800, color: statusColor }}>
+                <p style={{ fontSize: '1rem', fontWeight: 800, color: statusColor, fontFamily: 'var(--font-sans)' }}>
                   {result.canAfford ? '✓ Yes, you can afford it' : result.touchesSavings ? '⚠ Only if you use savings' : '✕ Not enough right now'}
                 </p>
-                <p style={{ fontSize: '0.775rem', color: 'var(--ink-3)', marginTop: '0.2rem' }}>
+                <p style={{ fontSize: '0.775rem', color: 'var(--ink-3)', marginTop: '0.2rem', fontFamily: 'var(--font-sans)' }}>
                   {result.canAfford
                     ? `${fmt(result.remaining)} still available after this purchase`
                     : result.touchesSavings
@@ -384,10 +386,10 @@ function AffordabilityChecker({ availableBalance, totalSavings }) {
                     : `You're ${fmt(Math.abs(result.remaining))} short`}
                 </p>
               </div>
-              <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--ink-1)', flexShrink: 0 }}>{fmt(result.val)}</span>
+              <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--ink-1)', flexShrink: 0, fontFamily: 'var(--font-mono)' }}>{fmt(result.val)}</span>
             </div>
           </div>
-          <button onClick={reset} style={{ width: '100%', background: 'transparent', border: '1px solid var(--border)', borderRadius: 8, color: 'var(--ink-3)', padding: '0.5rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer' }}>
+          <button onClick={reset} style={{ width: '100%', background: 'transparent', border: '1px solid var(--border-strong)', borderRadius: 8, color: 'var(--ink-3)', padding: '0.5rem', fontSize: '0.8rem', fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-sans)' }}>
             Check another amount
           </button>
         </>
@@ -404,26 +406,25 @@ function RecentTransactions({ transactions, onEdit, onNavigate }) {
   return (
     <div style={{ marginBottom: '0.875rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.625rem' }}>
-        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase' }}>Recent</p>
-        <button onClick={onNavigate} style={{ background: 'transparent', border: 'none', color: 'var(--accent-blue)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3 }}>
+        <p style={{ fontSize: '0.68rem', color: 'var(--ink-3)', fontWeight: 700, letterSpacing: '0.08em', textTransform: 'uppercase', fontFamily: 'var(--font-sans)' }}>Recent</p>
+        <button onClick={onNavigate} style={{ background: 'transparent', border: 'none', color: 'var(--accent-green)', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 3, fontFamily: 'var(--font-sans)' }}>
           See all <ChevronRight size={13} />
         </button>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
         {recent.map(t => (
           <div key={t.id} onClick={() => onEdit(t)} style={{
-            background: 'var(--bg-card)', border: '1px solid var(--border)',
-            borderRadius: 12, padding: '0.75rem 0.875rem',
+            background: 'var(--bg-card)', borderRadius: 12, padding: '0.75rem 0.875rem',
             display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer',
-            boxShadow: 'var(--shadow-card)',
+            border: '1px solid var(--border)', boxShadow: 'var(--shadow-card)',
           }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <p style={{ fontSize: '0.85rem', color: 'var(--ink-1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <p style={{ fontSize: '0.85rem', color: 'var(--ink-1)', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontFamily: 'var(--font-sans)' }}>
                 {t.description || t.category}
               </p>
-              <p style={{ fontSize: '0.7rem', color: 'var(--ink-4)' }}>{t.category} · {t.date}</p>
+              <p style={{ fontSize: '0.7rem', color: 'var(--ink-4)', fontFamily: 'var(--font-sans)' }}>{t.category} · {t.date}</p>
             </div>
-            <p style={{ fontWeight: 800, fontSize: '0.9rem', flexShrink: 0, color: t.type === 'income' ? 'var(--accent-green)' : 'var(--accent-red)' }}>
+            <p style={{ fontWeight: 800, fontSize: '0.9rem', flexShrink: 0, color: t.type === 'income' ? 'var(--accent-green)' : 'var(--accent-red)', fontFamily: 'var(--font-mono)' }}>
               {t.type === 'income' ? '+' : '-'}{fmt(t.amount)}
             </p>
           </div>
@@ -470,16 +471,18 @@ export default function Home() {
   if (txLoading) return <PageLoader />;
 
   return (
-    <div className="page">
+    <div className="page" style={{ background: 'var(--bg)' }}>
+      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
         <div>
-          <h1 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink-1)' }}>FlowTracker</h1>
+          <h1 style={{ fontSize: '1.2rem', fontWeight: 800, color: 'var(--ink-1)', fontFamily: 'var(--font-serif)' }}>FlowTracker</h1>
           <SyncIndicator state={syncState} />
         </div>
+        {/* Top-right add button — high contrast */}
         <button onClick={() => { setEditing(null); setShowForm(true); }} style={{
-          background: 'var(--accent-blue)', color: '#fff', border: 'none', borderRadius: 12,
+          background: 'var(--ink-1)', color: 'var(--bg)', border: 'none', borderRadius: 12,
           width: 44, height: 44, display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 4px 14px rgba(129,140,248,0.3)', cursor: 'pointer',
+          boxShadow: '0 4px 14px rgba(26,26,24,0.25)', cursor: 'pointer',
         }}>
           <Plus size={22} strokeWidth={2.5} />
         </button>
@@ -501,11 +504,12 @@ export default function Home() {
         onNavigate={() => navigate('/transactions')}
       />
 
+      {/* FAB — high contrast, clearly visible */}
       <button onClick={() => { setEditing(null); setShowForm(true); }} style={{
         position: 'fixed', bottom: 'calc(80px + env(safe-area-inset-bottom, 0px))', right: '1.25rem',
-        background: 'var(--accent-blue)', color: '#fff', border: 'none', borderRadius: '50%',
-        width: 52, height: 52, display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 4px 20px rgba(129,140,248,0.4)', zIndex: 200, cursor: 'pointer',
+        background: 'var(--ink-1)', color: 'var(--bg)', border: 'none', borderRadius: '50%',
+        width: 56, height: 56, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        boxShadow: '0 4px 20px rgba(26,26,24,0.35)', zIndex: 200, cursor: 'pointer',
       }}>
         <Plus size={24} strokeWidth={2.5} />
       </button>
