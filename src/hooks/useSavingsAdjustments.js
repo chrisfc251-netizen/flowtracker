@@ -1,42 +1,44 @@
-/**
- * useSavingsAdjustments.js
- *
- * Hook for reading and writing to the savings_adjustments table.
- *
- * Each row represents one savings reallocation event:
- *
- *   action_type = 'allocate'   — moved money from Available → Savings (same account)
- *   action_type = 'release'    — moved money from Savings → Available (same account)
- *   action_type = 'transfer'   — moved savings balance from account A to account B
- *   action_type = 'correction' — admin correction (signed delta, for typo fixes)
- *
- * amount is always positive. Direction is encoded in action_type.
- * For 'correction', a negative amount = reducing savings.
- */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
 
+/**
+ * useSavingsAdjustments
+ *
+ * Reads and writes to the savings_adjustments table.
+ * Each row represents one savings reallocation event:
+ *
+ *   allocate   — Available → Savings within one account (no money moves between accounts)
+ *   release    — Savings → Available within one account (no money moves between accounts)
+ *   transfer   — Savings from account A to account B (actual money moves + savings label moves)
+ *   correction — Signed delta to fix a typo; positive = add savings, negative = reduce savings
+ *
+ * These records are consumed by computeAccountBalances (useAccounts.js) as a third
+ * argument and layered on top of the transaction-derived savings baseline.
+ */
 export function useSavingsAdjustments() {
   const { user } = useAuth();
   const [adjustments, setAdjustments] = useState([]);
   const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
 
   const fetchAll = useCallback(async () => {
     if (!user) { setAdjustments([]); setLoading(false); return; }
-    const { data, error } = await supabase
+    setLoading(true);
+    const { data, err } = await supabase
       .from('savings_adjustments')
       .select('*')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false });
-    if (!error) setAdjustments(data || []);
+    if (err) { setError(err); }
+    else     { setAdjustments(data || []); }
     setLoading(false);
   }, [user]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  // ── Allocate: move from Available → Savings (same account) ──────────────
-  const allocateToSavings = useCallback(async ({ account_id, amount, note = '' }) => {
+  // ── allocate: move Available → Savings (same account, no balance change) ──
+  const allocateSavings = useCallback(async ({ account_id, amount, note = '' }) => {
     if (!user) return { error: new Error('Not authenticated') };
     const amt = Number(amount);
     if (!amt || amt <= 0) return { error: new Error('Amount must be greater than 0') };
@@ -46,17 +48,18 @@ export function useSavingsAdjustments() {
       amount:          amt,
       from_account_id: account_id,
       to_account_id:   null,
-      note:            note || 'Moved to savings',
+      note:            note.trim() || 'Moved to savings',
       date:            new Date().toISOString().slice(0, 10),
     };
-    const { data, error } = await supabase.from('savings_adjustments').insert(row).select().single();
+    const { data, error } = await supabase
+      .from('savings_adjustments').insert(row).select().single();
     if (error) return { error };
     setAdjustments((prev) => [data, ...prev]);
     return { data };
   }, [user]);
 
-  // ── Release: move from Savings → Available (same account) ───────────────
-  const releaseFromSavings = useCallback(async ({ account_id, amount, note = '' }) => {
+  // ── release: move Savings → Available (same account, no balance change) ──
+  const releaseSavings = useCallback(async ({ account_id, amount, note = '' }) => {
     if (!user) return { error: new Error('Not authenticated') };
     const amt = Number(amount);
     if (!amt || amt <= 0) return { error: new Error('Amount must be greater than 0') };
@@ -66,59 +69,63 @@ export function useSavingsAdjustments() {
       amount:          amt,
       from_account_id: account_id,
       to_account_id:   null,
-      note:            note || 'Released from savings',
+      note:            note.trim() || 'Released from savings',
       date:            new Date().toISOString().slice(0, 10),
     };
-    const { data, error } = await supabase.from('savings_adjustments').insert(row).select().single();
+    const { data, error } = await supabase
+      .from('savings_adjustments').insert(row).select().single();
     if (error) return { error };
     setAdjustments((prev) => [data, ...prev]);
     return { data };
   }, [user]);
 
-  // ── Transfer savings: move from Account A savings → Account B savings ────
-  // This moves actual money between accounts AND re-labels the destination as savings.
+  // ── transferSavings: move savings money from account A to account B ───────
+  // This moves actual money AND re-labels the destination amount as savings.
   const transferSavings = useCallback(async ({ from_account_id, to_account_id, amount, note = '' }) => {
     if (!user) return { error: new Error('Not authenticated') };
     const amt = Number(amount);
     if (!amt || amt <= 0) return { error: new Error('Amount must be greater than 0') };
-    if (from_account_id === to_account_id) return { error: new Error('Select two different accounts') };
+    if (from_account_id === to_account_id) return { error: new Error('Source and destination must be different accounts') };
     const row = {
-      user_id:         user.id,
+      user_id: user.id,
       action_type:     'transfer',
       amount:          amt,
       from_account_id,
       to_account_id,
-      note:            note || 'Savings transfer',
+      note:            note.trim() || 'Savings transfer',
       date:            new Date().toISOString().slice(0, 10),
     };
-    const { data, error } = await supabase.from('savings_adjustments').insert(row).select().single();
+    const { data, error } = await supabase
+      .from('savings_adjustments').insert(row).select().single();
     if (error) return { error };
     setAdjustments((prev) => [data, ...prev]);
     return { data };
   }, [user]);
 
-  // ── Correction: admin-style signed delta (positive or negative) ──────────
+  // ── correctSavings: admin correction with required reason ─────────────────
+  // amount may be negative to reduce savings.
   const correctSavings = useCallback(async ({ account_id, amount, note }) => {
     if (!user) return { error: new Error('Not authenticated') };
     const amt = Number(amount);
     if (amt === 0 || isNaN(amt)) return { error: new Error('Amount cannot be zero') };
-    if (!note?.trim()) return { error: new Error('Reason is required for corrections') };
+    if (!note || !note.trim()) return { error: new Error('A reason is required for corrections') };
     const row = {
       user_id:         user.id,
       action_type:     'correction',
-      amount:          amt,           // may be negative
+      amount:          amt,
       from_account_id: account_id,
       to_account_id:   null,
       note:            note.trim(),
       date:            new Date().toISOString().slice(0, 10),
     };
-    const { data, error } = await supabase.from('savings_adjustments').insert(row).select().single();
+    const { data, error } = await supabase
+      .from('savings_adjustments').insert(row).select().single();
     if (error) return { error };
     setAdjustments((prev) => [data, ...prev]);
     return { data };
   }, [user]);
 
-  // ── Delete a single adjustment (undo) ────────────────────────────────────
+  // ── deleteAdjustment: undo a single entry ─────────────────────────────────
   const deleteAdjustment = useCallback(async (id) => {
     if (!user) return { error: new Error('Not authenticated') };
     const { error } = await supabase
@@ -134,9 +141,10 @@ export function useSavingsAdjustments() {
   return {
     adjustments,
     loading,
+    error,
     fetchAll,
-    allocateToSavings,
-    releaseFromSavings,
+    allocateSavings,
+    releaseSavings,
     transferSavings,
     correctSavings,
     deleteAdjustment,
