@@ -1,3 +1,19 @@
+/**
+ * useAccounts.js
+ *
+ * computeAccountBalances now accepts a third argument: adjustments[]
+ * from useSavingsAdjustments. Adjustments affect savingsBreakdown
+ * (and in the case of 'transfer', also actual balances between accounts).
+ *
+ * Accounting rules enforced in the return of every call:
+ *   total   = balances[id]         (computed from transactions + transfers + transfer-type adjustments)
+ *   savings = savingsBreakdown[id] (computed from income allocations + savings adjustments)
+ *   available = total - savings    (derived, never stored separately)
+ *
+ *   savings >= 0 (clamped)
+ *   savings <= total (clamped)
+ *   available = total - savings (always)
+ */
 import { useCallback, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from './useAuth';
@@ -55,18 +71,30 @@ export function useAccounts() {
     return { data: true };
   }, [user]);
 
-  // Compute balance for each account from transactions + transfers + savings adjustments
-  // savingsAdjustments: optional array from useSavingsAdjustments — reallocates the
-  // *savings attribution* between accounts without changing the total savings pool.
-  function computeAccountBalances(transactions, transfers, savingsAdjustments = []) {
-    const balances = {};
+  /**
+   * computeAccountBalances(transactions, transfers, adjustments?)
+   *
+   * Single source of truth for all balance/savings calculations in the app.
+   * adjustments is optional — pass [] or omit if not using savings adjustments.
+   *
+   * Returns:
+   *   balances        — { [accountId]: number }  total balance (available + savings)
+   *   savingsBreakdown— { [accountId]: number }  savings portion of total
+   *
+   * These two objects are always consistent:
+   *   available[id] = balances[id] - savingsBreakdown[id]  (derived by callers)
+   *   savingsBreakdown[id] is clamped to [0, balances[id]]
+   */
+  function computeAccountBalances(transactions, transfers, adjustments = []) {
+    const balances        = {};
     const savingsBreakdown = {};
 
     for (const a of accounts) {
-      balances[a.id] = 0;
+      balances[a.id]         = 0;
       savingsBreakdown[a.id] = 0;
     }
 
+    // ── Step 1: Apply transactions ─────────────────────────────────────────
     for (const t of transactions) {
       if (!t.account_id || !balances.hasOwnProperty(t.account_id)) continue;
       if (t.type === 'income') {
@@ -75,34 +103,74 @@ export function useAccounts() {
       } else {
         balances[t.account_id] -= Number(t.amount);
       }
-      // Savings go to savings_account_id
+      // Savings allocation routes to savings_account_id
       if (t.savings_allocation && t.savings_account_id) {
         if (balances.hasOwnProperty(t.savings_account_id)) {
-          balances[t.savings_account_id]         += Number(t.savings_allocation);
+          balances[t.savings_account_id]        += Number(t.savings_allocation);
           savingsBreakdown[t.savings_account_id] += Number(t.savings_allocation);
         }
       }
     }
 
+    // ── Step 2: Apply account transfers ───────────────────────────────────
     for (const tr of transfers) {
       if (balances.hasOwnProperty(tr.from_account_id)) balances[tr.from_account_id] -= Number(tr.amount);
       if (balances.hasOwnProperty(tr.to_account_id))   balances[tr.to_account_id]   += Number(tr.amount);
     }
 
-    // Apply savings reallocations — shifts savings attribution between accounts.
-    // The account balance (spendable) is unchanged; only savingsBreakdown shifts.
-    for (const adj of savingsAdjustments) {
-      if (adj.from_account_id && savingsBreakdown.hasOwnProperty(adj.from_account_id)) {
-        savingsBreakdown[adj.from_account_id] -= Number(adj.amount);
-      }
-      if (adj.to_account_id && savingsBreakdown.hasOwnProperty(adj.to_account_id)) {
-        savingsBreakdown[adj.to_account_id] += Number(adj.amount);
+    // ── Step 3: Apply savings adjustments ─────────────────────────────────
+    for (const adj of adjustments) {
+      const amt = Number(adj.amount);
+      if (!amt) continue;
+
+      switch (adj.action_type) {
+        case 'allocate':
+          // Available → Savings within the same account.
+          // No change to total balance; only shifts the savings label.
+          if (savingsBreakdown.hasOwnProperty(adj.from_account_id)) {
+            savingsBreakdown[adj.from_account_id] += amt;
+          }
+          break;
+
+        case 'release':
+          // Savings → Available within the same account.
+          // No change to total balance; only un-labels savings.
+          if (savingsBreakdown.hasOwnProperty(adj.from_account_id)) {
+            savingsBreakdown[adj.from_account_id] -= amt;
+          }
+          break;
+
+        case 'transfer':
+          // Move actual money from Account A to Account B, where the
+          // source money came from savings and the destination is also labelled savings.
+          // Total system money stays the same.
+          if (balances.hasOwnProperty(adj.from_account_id)) {
+            balances[adj.from_account_id]         -= amt;
+            savingsBreakdown[adj.from_account_id] -= amt;
+          }
+          if (adj.to_account_id && balances.hasOwnProperty(adj.to_account_id)) {
+            balances[adj.to_account_id]         += amt;
+            savingsBreakdown[adj.to_account_id] += amt;
+          }
+          break;
+
+        case 'correction':
+          // Signed delta applied directly to savings label (no balance change).
+          // amt may be negative here.
+          if (savingsBreakdown.hasOwnProperty(adj.from_account_id)) {
+            savingsBreakdown[adj.from_account_id] += amt;
+          }
+          break;
+
+        default:
+          break;
       }
     }
 
-    // Clamp savings to 0 (guard against bad data / out-of-order adjustments)
+    // ── Step 4: Clamp to prevent impossible display states ────────────────
     for (const id of Object.keys(savingsBreakdown)) {
-      if (savingsBreakdown[id] < 0) savingsBreakdown[id] = 0;
+      const total = balances[id] || 0;
+      savingsBreakdown[id] = Math.max(0, Math.min(savingsBreakdown[id], total));
     }
 
     return { balances, savingsBreakdown };
